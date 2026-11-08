@@ -107,7 +107,7 @@ function SpinningDiamond() {
 
 export default function ChatPage() {
   const [isAppLoaded, setIsAppLoaded] = useState(false)
-  
+
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register')
   const [inputUsername, setInputUsername] = useState('')
@@ -195,8 +195,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     const timer = setTimeout(() => setIsAppLoaded(true), 50)
-    
-    // Supabase auth sessiyasini va brauzer xotirasini tekshiramiz
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const emailId = (session.user.email?.split('@')[0] || 'google_user').toLowerCase()
@@ -210,7 +209,6 @@ export default function ChatPage() {
         fetchMessages()
         fetchContacts(emailId)
 
-        // URL'da ko'rinib qolgan token/kodlarni tozalaymiz
         if (typeof window !== 'undefined' && (window.location.hash || window.location.search)) {
           window.history.replaceState(null, '', window.location.pathname)
         }
@@ -234,7 +232,7 @@ export default function ChatPage() {
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const incoming = payload.new as Message
-          
+
           if (incoming.content.startsWith('PROFILE_AVATAR|')) {
             const avatarUrl = incoming.content.replace('PROFILE_AVATAR|', '')
             setProfileAvatar(avatarUrl)
@@ -311,7 +309,6 @@ export default function ChatPage() {
     }
   }
 
-  // SERVERGA (SUPABASE) YANGI KONTAKT QO'SHISH FUNKSIYASI
   const handleAddContact = async (e: React.FormEvent) => {
     e.preventDefault()
     setContactFeedback('')
@@ -393,7 +390,6 @@ export default function ChatPage() {
     }
   }
 
-  // GOOGLE ORQALI KIRISH (SUPABASE OAUTH)
   const handleGoogleLogin = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -660,7 +656,6 @@ export default function ChatPage() {
     setIsDrawerOpen(false)
   }
 
-  // TANLANGAN KONTAKT BO'YICHA XABARLARNI FILTRLASH
   const displayedMessages = selectedContact
     ? messages.filter(
         (m) =>
@@ -701,8 +696,19 @@ export default function ChatPage() {
 
   if (!isAuthenticated) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', width: '100vw', backgroundColor: '#050508', color: '#fff', fontFamily: 'sans-serif', padding: '20px', boxSizing: 'border-box' }}>
+      <div className="app-viewport" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100vw', backgroundColor: '#050508', color: '#fff', fontFamily: 'sans-serif', padding: '16px', boxSizing: 'border-box', overflowY: 'auto' }}>
         <style jsx global>{`
+          html, body {
+            margin: 0;
+            padding: 0;
+            background-color: #050508;
+            overscroll-behavior: none;
+            -webkit-tap-highlight-color: transparent;
+          }
+          .app-viewport {
+            height: 100vh;
+            height: 100dvh;
+          }
           @keyframes pulseGlow {
             0% { box-shadow: 0 0 15px rgba(236, 72, 153, 0.5); }
             50% { box-shadow: 0 0 30px rgba(244, 114, 182, 0.8); }
@@ -711,13 +717,12 @@ export default function ChatPage() {
           .auth-box { animation: pulseGlow 4s infinite ease-in-out; }
         `}</style>
 
-        <div className="auth-box" style={{ width: '100%', maxWidth: '400px', padding: '30px', borderRadius: '24px', backgroundColor: '#0c0a14', border: '1px solid rgba(168, 85, 247, 0.4)', boxSizing: 'border-box', textAlign: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '26px', fontWeight: 900, color: '#f472b6', marginBottom: '8px' }}>
+        <div className="auth-box" style={{ width: '100%', maxWidth: '400px', padding: 'clamp(20px, 5vw, 30px)', borderRadius: '24px', backgroundColor: '#0c0a14', border: '1px solid rgba(168, 85, 247, 0.4)', boxSizing: 'border-box', textAlign: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: 'clamp(22px, 6vw, 26px)', fontWeight: 900, color: '#f472b6', marginBottom: '8px' }}>
             Linksy <Crown size={22} color="#facc15" />
           </div>
-          <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '24px' }}>Sevishganlar uchun xavfsiz va shaxsiy makon 💖</div>
+          <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '20px' }}>Sevishganlar uchun xavfsiz va shaxsiy makon 💖</div>
 
-          {/* GOOGLE BILAN KIRISH TUGMASI */}
           <button
             onClick={handleGoogleLogin}
             style={{ width: '100%', padding: '12px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: '#ffffff', color: '#000000', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '16px', boxShadow: '0 4px 12px rgba(255,255,255,0.1)' }}
@@ -726,13 +731,13 @@ export default function ChatPage() {
             Google orqali kirish
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '16px 0', color: '#6b7280', fontSize: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '14px 0', color: '#6b7280', fontSize: '12px' }}>
             <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }}></div>
             yoki ID bilan
             <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }}></div>
           </div>
 
-          <div style={{ display: 'flex', backgroundColor: '#18181b', borderRadius: '12px', padding: '4px', marginBottom: '20px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+          <div style={{ display: 'flex', backgroundColor: '#18181b', borderRadius: '12px', padding: '4px', marginBottom: '18px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
             <button
               onClick={() => { setAuthMode('register'); setAuthError(''); }}
               style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', backgroundColor: authMode === 'register' ? 'rgba(147,51,234,0.4)' : 'transparent', color: authMode === 'register' ? '#fff' : '#9ca3af', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
@@ -755,7 +760,7 @@ export default function ChatPage() {
                 value={inputUsername}
                 onChange={(e) => setInputUsername(e.target.value)}
                 placeholder="Masalan: shahzoda_2026"
-                style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', backgroundColor: '#18181b', border: '1px solid rgba(168,85,247,0.4)', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', backgroundColor: '#18181b', border: '1px solid rgba(168,85,247,0.4)', color: '#fff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
               />
             </div>
 
@@ -766,7 +771,7 @@ export default function ChatPage() {
                 value={inputPassword}
                 onChange={(e) => setInputPassword(e.target.value)}
                 placeholder="••••••••"
-                style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', backgroundColor: '#18181b', border: '1px solid rgba(168,85,247,0.4)', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', backgroundColor: '#18181b', border: '1px solid rgba(168,85,247,0.4)', color: '#fff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
               />
             </div>
 
@@ -774,7 +779,7 @@ export default function ChatPage() {
 
             <button
               type="submit"
-              style={{ width: '100%', padding: '13px', borderRadius: '14px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 800, fontSize: '14px', cursor: 'pointer', marginTop: '6px', boxShadow: '0 0 20px rgba(236,72,153,0.4)' }}
+              style={{ width: '100%', padding: '13px', borderRadius: '14px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 800, fontSize: '14px', cursor: 'pointer', marginTop: '4px', boxShadow: '0 0 20px rgba(236,72,153,0.4)' }}
             >
               {authMode === 'register' ? 'Hisob yaratish ✨' : 'Kirish 🚀'}
             </button>
@@ -786,10 +791,10 @@ export default function ChatPage() {
 
   return (
     <div
+      className="app-viewport"
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: '100vh',
         width: '100vw',
         backgroundColor: '#050508',
         color: '#ffffff',
@@ -803,6 +808,24 @@ export default function ChatPage() {
       }}
     >
       <style jsx global>{`
+        html, body {
+          margin: 0;
+          padding: 0;
+          background-color: #050508;
+          overscroll-behavior: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .app-viewport {
+          height: 100vh;
+          height: 100dvh;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
         @keyframes pulseGlow {
           0% { box-shadow: 0 0 10px rgba(236, 72, 153, 0.6), inset 0 0 10px rgba(147, 51, 234, 0.6); }
           50% { box-shadow: 0 0 25px rgba(244, 114, 182, 0.9), inset 0 0 18px rgba(236, 72, 153, 0.9); }
@@ -815,7 +838,7 @@ export default function ChatPage() {
         }
         .animated-avatar-ring {
           animation: pulseGlow 3s infinite ease-in-out, gradientRotate 5s infinite linear;
-          border: 3px solid transparent;
+          border: 2.5px solid transparent;
           background: linear-gradient(135deg, #ec4899, #9333ea, #facc15) border-box;
         }
         @keyframes bubbleGlow {
@@ -825,6 +848,46 @@ export default function ChatPage() {
         }
         .animated-bubble {
           animation: bubbleGlow 4s infinite ease-in-out;
+        }
+
+        /* TELEFONLAR UCHUN MAXSUS MOSLASHUVCHAN QOIDALAR */
+        @media (max-width: 640px) {
+          .royal-badge {
+            display: none !important;
+          }
+          .mobile-header {
+            padding: 10px 12px !important;
+            gap: 8px !important;
+          }
+          .mobile-scroll-area {
+            padding: 12px !important;
+          }
+          .mobile-bubble {
+            max-width: 85% !important;
+            padding: 10px 14px !important;
+          }
+          .mobile-input-form {
+            padding: 8px 10px !important;
+            gap: 6px !important;
+          }
+          .mobile-send-btn {
+            padding: 11px 14px !important;
+          }
+          .mobile-nav {
+            padding: 8px 6px calc(8px + env(safe-area-inset-bottom)) 6px !important;
+          }
+          .contact-card-row {
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+          .contact-card-actions {
+            width: 100% !important;
+            justify-content: flex-end !important;
+          }
+          .contact-card-actions button:first-child {
+            flex: 1 !important;
+            justify-content: center !important;
+          }
         }
       `}</style>
 
@@ -844,7 +907,7 @@ export default function ChatPage() {
             cursor: 'zoom-out',
           }}
         >
-          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh', borderRadius: '24px', overflow: 'hidden', border: '3px solid #ec4899', boxShadow: '0 0 50px rgba(236,72,153,0.6)' }}>
+          <div style={{ position: 'relative', maxWidth: '92vw', maxHeight: '85vh', borderRadius: '24px', overflow: 'hidden', border: '3px solid #ec4899', boxShadow: '0 0 50px rgba(236,72,153,0.6)' }}>
             <img src={selectedContact ? selectedContact.avatar : profileAvatar} alt="Zoomed Avatar" style={{ width: '100%', height: '100%', objectFit: 'contain', maxHeight: '80vh' }} />
           </div>
         </div>
@@ -852,6 +915,7 @@ export default function ChatPage() {
 
       {activeCall && (
         <div
+          className="app-viewport"
           style={{
             position: 'fixed',
             inset: 0,
@@ -862,52 +926,51 @@ export default function ChatPage() {
             justifyContent: 'space-between',
             backgroundColor: '#05050bf8',
             backdropFilter: 'blur(24px)',
-            padding: '40px 20px',
+            padding: 'clamp(20px, 5vh, 40px) 16px calc(24px + env(safe-area-inset-bottom)) 16px',
             boxSizing: 'border-box',
             width: '100vw',
-            height: '100vh',
           }}
         >
-          <div style={{ textAlign: 'center', marginTop: '10px' }}>
-            <div className="animated-avatar-ring" style={{ width: '105px', height: '105px', borderRadius: '50%', overflow: 'hidden', margin: '0 auto 14px auto' }}>
+          <div style={{ textAlign: 'center', marginTop: '6px' }}>
+            <div className="animated-avatar-ring" style={{ width: 'clamp(80px, 22vw, 105px)', height: 'clamp(80px, 22vw, 105px)', borderRadius: '50%', overflow: 'hidden', margin: '0 auto 12px auto' }}>
               <img src={selectedContact ? selectedContact.avatar : profileAvatar} alt="Caller" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: '#fff' }}>
+            <div style={{ fontSize: 'clamp(18px, 5vw, 22px)', fontWeight: 800, color: '#fff' }}>
               {selectedContact ? selectedContact.name : profileName}
             </div>
-            <div style={{ fontSize: '14px', color: '#22d3ee', marginTop: '6px' }}>
+            <div style={{ fontSize: '13px', color: '#22d3ee', marginTop: '6px' }}>
               {activeCall === 'video' ? '📹 To\'liq ekranli video qo\'ng\'iroq...' : '📞 Audio qo\'ng\'iroq davom etmoqda...'}
             </div>
           </div>
 
           {activeCall === 'video' && (
-            <div style={{ width: '100%', maxWidth: '900px', flex: 1, maxHeight: '68vh', backgroundColor: '#121019', borderRadius: '24px', overflow: 'hidden', border: '2px solid rgba(168,85,247,0.5)', position: 'relative', margin: '20px 0', boxShadow: '0 0 50px rgba(147,51,234,0.4)' }}>
+            <div style={{ width: '100%', maxWidth: '900px', flex: 1, maxHeight: '62vh', backgroundColor: '#121019', borderRadius: '20px', overflow: 'hidden', border: '2px solid rgba(168,85,247,0.5)', position: 'relative', margin: '14px 0', boxShadow: '0 0 50px rgba(147,51,234,0.4)' }}>
               <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '6px' }}>
             <button
               onClick={toggleMute}
-              style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: isMuted ? '#ef4444' : '#27272a', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}
+              style={{ width: '54px', height: '54px', borderRadius: '50%', backgroundColor: isMuted ? '#ef4444' : '#27272a', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}
             >
-              {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
+              {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
             </button>
 
             {activeCall === 'video' && (
               <button
                 onClick={toggleVideo}
-                style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: isVideoOff ? '#ef4444' : '#27272a', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}
+                style={{ width: '54px', height: '54px', borderRadius: '50%', backgroundColor: isVideoOff ? '#ef4444' : '#27272a', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}
               >
-                {isVideoOff ? <VideoOff size={24} /> : <Video size={24} />}
+                {isVideoOff ? <VideoOff size={22} /> : <Video size={22} />}
               </button>
             )}
 
             <button
               onClick={endCall}
-              style={{ width: '68px', height: '68px', borderRadius: '50%', backgroundColor: '#dc2626', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 0 25px rgba(220,38,38,0.7)' }}
+              style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#dc2626', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 0 25px rgba(220,38,38,0.7)' }}
             >
-              <PhoneOff size={30} />
+              <PhoneOff size={28} />
             </button>
           </div>
         </div>
@@ -944,7 +1007,7 @@ export default function ChatPage() {
             }}
           >
             {activeAnimationGift.is3D ? (
-              <div style={{ width: '320px', height: '320px', maxWidth: '85vw', maxHeight: '55vh' }}>
+              <div style={{ width: '280px', height: '280px', maxWidth: '80vw', maxHeight: '50vh' }}>
                 <Canvas camera={{ position: [0, 0, 5] }}>
                   <ambientLight intensity={1.5} />
                   <pointLight position={[10, 10, 10]} intensity={2} />
@@ -953,11 +1016,11 @@ export default function ChatPage() {
                 </Canvas>
               </div>
             ) : (
-              <div style={{ fontSize: '80px', filter: 'drop-shadow(0 0 35px #ec4899)' }}>
+              <div style={{ fontSize: 'clamp(64px, 18vw, 80px)', filter: 'drop-shadow(0 0 35px #ec4899)' }}>
                 {activeAnimationGift.emoji}
               </div>
             )}
-            <div style={{ fontSize: '24px', fontWeight: 800, color: '#f472b6', marginTop: '16px', textAlign: 'center', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 'clamp(18px, 5vw, 24px)', fontWeight: 800, color: '#f472b6', marginTop: '16px', textAlign: 'center', textTransform: 'uppercase' }}>
               ✨ {activeAnimationGift.name} ✨
             </div>
           </div>
@@ -967,16 +1030,16 @@ export default function ChatPage() {
         {isDrawerOpen && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 60, display: 'flex' }}>
             <div onClick={() => setIsDrawerOpen(false)} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }} />
-            <div style={{ position: 'relative', zIndex: 70, width: '300px', maxWidth: '80vw', backgroundColor: '#0c0a14', borderRight: '1px solid rgba(168, 85, 247, 0.35)', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%', boxSizing: 'border-box' }}>
+            <div style={{ position: 'relative', zIndex: 70, width: '290px', maxWidth: '82vw', backgroundColor: '#0c0a14', borderRight: '1px solid rgba(168, 85, 247, 0.35)', padding: '18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%', boxSizing: 'border-box', overflowY: 'auto' }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid rgba(147, 51, 234, 0.3)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '14px', borderBottom: '1px solid rgba(147, 51, 234, 0.3)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '20px', color: '#f472b6' }}>
                     Linksy <Crown size={18} color="#facc15" />
                   </div>
                   <button onClick={() => setIsDrawerOpen(false)} style={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', padding: '6px', cursor: 'pointer' }}><X size={18} /></button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '16px' }}>
                   {[
                     { id: 'chat', label: 'Suhbat oynasi', icon: <MessageCircle size={18} color="#22d3ee" /> },
                     { id: 'contacts', label: `Kontaktlar (${contacts.length})`, icon: <Users size={18} color="#38bdf8" /> },
@@ -989,7 +1052,7 @@ export default function ChatPage() {
                     <button
                       key={item.id}
                       onClick={() => { setActiveTab(item.id as any); setIsDrawerOpen(false); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '12px', border: activeTab === item.id ? '1px solid rgba(168,85,247,0.5)' : '1px solid transparent', backgroundColor: activeTab === item.id ? 'rgba(147,51,234,0.25)' : 'transparent', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 13px', borderRadius: '12px', border: activeTab === item.id ? '1px solid rgba(168,85,247,0.5)' : '1px solid transparent', backgroundColor: activeTab === item.id ? 'rgba(147,51,234,0.25)' : 'transparent', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
                     >
                       {item.icon} {item.label}
                     </button>
@@ -997,7 +1060,7 @@ export default function ChatPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
                 <button onClick={clearChat} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 14px', borderRadius: '12px', backgroundColor: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.35)', color: '#fbbf24', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}><Trash2 size={16} /> Xabarlarni tozalash</button>
                 <button onClick={() => { localStorage.removeItem('linksy_current_user'); supabase.auth.signOut(); setIsAuthenticated(false); }} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 14px', borderRadius: '12px', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#f87171', fontSize: '13px', fontWeight: 600, cursor: 'pointer', width: '100%', textAlign: 'left' }}><LogOut size={16} /> Hisobdan chiqish</button>
               </div>
@@ -1006,63 +1069,63 @@ export default function ChatPage() {
         )}
 
         {/* HEADER */}
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: '1px solid rgba(147, 51, 234, 0.3)', backgroundColor: '#0c0a14', flexShrink: 0, gap: '12px', boxSizing: 'border-box' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-            <button onClick={() => setIsDrawerOpen(true)} style={{ padding: '9px', borderRadius: '12px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#d8b4fe', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Menu size={20} /></button>
-            
-            <div 
-              onClick={() => setActiveTab('profile')} 
-              className="animated-avatar-ring" 
-              style={{ width: '44px', height: '44px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#000', flexShrink: 0, cursor: 'pointer' }}
+        <header className="mobile-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: '1px solid rgba(147, 51, 234, 0.3)', backgroundColor: '#0c0a14', flexShrink: 0, gap: '10px', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+            <button onClick={() => setIsDrawerOpen(true)} style={{ padding: '8px', borderRadius: '11px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#d8b4fe', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Menu size={19} /></button>
+
+            <div
+              onClick={() => setActiveTab('profile')}
+              className="animated-avatar-ring"
+              style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#000', flexShrink: 0, cursor: 'pointer' }}
               title="Profilga o'tish"
             >
               <img src={selectedContact ? selectedContact.avatar : profileAvatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
 
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                <span style={{ fontWeight: 700, fontSize: '15px', color: '#f472b6', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ fontWeight: 700, fontSize: '14px', color: '#f472b6', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {selectedContact ? selectedContact.name : profileName}
                 </span>
-                <CheckCircle2 size={16} style={{ fill: 'url(#gradient-check)', color: '#fff', flexShrink: 0 }} />
+                <CheckCircle2 size={15} style={{ fill: 'url(#gradient-check)', color: '#fff', flexShrink: 0 }} />
                 <svg width="0" height="0">
                   <linearGradient id="gradient-check" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop stopColor="#ec4899" offset="0%" />
                     <stop stopColor="#9333ea" offset="100%" />
                   </linearGradient>
                 </svg>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'linear-gradient(135deg, rgba(236,72,153,0.25), rgba(147,51,234,0.35))', border: '1px solid rgba(244,114,182,0.6)', color: '#f472b6', padding: '2px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, flexShrink: 0, boxShadow: '0 0 10px rgba(236,72,153,0.4)' }}>
+                <span className="royal-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'linear-gradient(135deg, rgba(236,72,153,0.25), rgba(147,51,234,0.35))', border: '1px solid rgba(244,114,182,0.6)', color: '#f472b6', padding: '2px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, flexShrink: 0, boxShadow: '0 0 10px rgba(236,72,153,0.4)' }}>
                   <Crown size={11} color="#facc15" /> ROYAL LOVE ✨
                 </span>
               </div>
-              <div style={{ fontSize: '11px', color: '#22d3ee', marginTop: '2px' }}>
+              <div style={{ fontSize: '11px', color: '#22d3ee', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {selectedContact
-                  ? `Suhbatdosh: @${selectedContact.username} (Sizning ID: @${currentUser})`
-                  : `Sizning ID: @${currentUser} (online ✨)`}
+                  ? `@${selectedContact.username} • Siz: @${currentUser}`
+                  : `ID: @${currentUser} (online ✨)`}
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
             <button onClick={() => setActiveTab('contacts')} style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.4)', color: '#38bdf8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Kontaktlar">
-              <UserPlus size={18} />
+              <UserPlus size={17} />
             </button>
             <button onClick={() => startCall('audio')} style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(34, 211, 238, 0.15)', border: '1px solid rgba(34, 211, 238, 0.4)', color: '#22d3ee', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Audio qo'ng'iroq">
-              <PhoneCall size={18} />
+              <PhoneCall size={17} />
             </button>
             <button onClick={() => startCall('video')} style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(236, 72, 153, 0.15)', border: '1px solid rgba(236, 72, 153, 0.4)', color: '#f472b6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Video qo'ng'iroq">
-              <Video size={18} />
+              <Video size={17} />
             </button>
           </div>
         </header>
 
         {/* ASOSIY QISM */}
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '20px', boxSizing: 'border-box' }}>
+        <div className="mobile-scroll-area" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px 20px', boxSizing: 'border-box', WebkitOverflowScrolling: 'touch' }}>
           {activeTab === 'chat' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
               {/* Suhbatdosh tanlash tezkor paneli */}
               {contacts.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', paddingBottom: '8px', borderBottom: '1px solid rgba(168,85,247,0.2)' }}>
+                <div className="no-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', paddingBottom: '8px', borderBottom: '1px solid rgba(168,85,247,0.2)' }}>
                   <span style={{ fontSize: '12px', color: '#9ca3af', flexShrink: 0 }}>Yaqinlar:</span>
                   {contacts.map((c) => {
                     const isSelected = selectedContact?.id === c.id
@@ -1094,7 +1157,7 @@ export default function ChatPage() {
               )}
 
               {displayedMessages.length === 0 && (
-                <div style={{ textAlign: 'center', color: '#6b7280', marginTop: '60px', fontSize: '14px' }}>
+                <div style={{ textAlign: 'center', color: '#6b7280', marginTop: '50px', fontSize: '14px', padding: '0 12px' }}>
                   {selectedContact
                     ? `${selectedContact.name} (@${selectedContact.username}) bilan hali xabarlar yo'q. Birinchi bo'lib yozing! 💖`
                     : "Hali xabarlar yo'q. Kontaktlar bo'limidan yaqiningizni qo'shing va yozishni boshlang! 💖"}
@@ -1123,39 +1186,39 @@ export default function ChatPage() {
                 return (
                   <div key={msg.id} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', width: '100%' }}>
                     {isGift ? (
-                      <div className="animated-bubble" style={{ padding: '14px 22px', borderRadius: '18px', background: 'linear-gradient(135deg, rgba(236,72,153,0.35), rgba(147,51,234,0.45))', border: '2px solid #f472b6', textAlign: 'center', display: 'flex', alignItems: 'center', gap: '12px', maxWidth: '80%', boxSizing: 'border-box' }}>
-                        <span style={{ fontSize: '36px' }}>{giftEmoji}</span>
+                      <div className="animated-bubble" style={{ padding: '12px 18px', borderRadius: '18px', background: 'linear-gradient(135deg, rgba(236,72,153,0.35), rgba(147,51,234,0.45))', border: '2px solid #f472b6', textAlign: 'center', display: 'flex', alignItems: 'center', gap: '12px', maxWidth: '85%', boxSizing: 'border-box' }}>
+                        <span style={{ fontSize: '32px' }}>{giftEmoji}</span>
                         <div style={{ textAlign: 'left', minWidth: 0 }}>
-                          <div style={{ fontSize: '12px', fontWeight: 700, color: '#f472b6' }}>SEHRLI SOVG'A</div>
-                          <div style={{ fontSize: '15px', fontWeight: 800, color: '#fff', wordBreak: 'break-word' }}>{giftName}</div>
+                          <div style={{ fontSize: '11px', fontWeight: 700, color: '#f472b6' }}>SEHRLI SOVG'A</div>
+                          <div style={{ fontSize: '14px', fontWeight: 800, color: '#fff', wordBreak: 'break-word' }}>{giftName}</div>
                         </div>
                       </div>
                     ) : isSticker ? (
-                      <div className="animated-bubble" style={{ padding: '16px 22px', borderRadius: '20px', background: 'linear-gradient(135deg, rgba(219,39,119,0.3), rgba(147,51,234,0.3))', border: '2px solid #ec4899', textAlign: 'center', fontSize: '18px', fontWeight: 800, color: '#f472b6', boxShadow: '0 0 20px rgba(236,72,153,0.3)', maxWidth: '80%', boxSizing: 'border-box' }}>
+                      <div className="animated-bubble" style={{ padding: '12px 18px', borderRadius: '20px', background: 'linear-gradient(135deg, rgba(219,39,119,0.3), rgba(147,51,234,0.3))', border: '2px solid #ec4899', textAlign: 'center', fontSize: 'clamp(14px, 4vw, 17px)', fontWeight: 800, color: '#f472b6', boxShadow: '0 0 20px rgba(236,72,153,0.3)', maxWidth: '85%', boxSizing: 'border-box' }}>
                         {msg.content}
                       </div>
                     ) : isVoice ? (
-                      <div className="animated-bubble" style={{ padding: '12px 16px', borderRadius: '16px', background: 'linear-gradient(135deg, rgba(34,211,238,0.25), rgba(147,51,234,0.35))', border: '1px solid #22d3ee', display: 'flex', alignItems: 'center', gap: '12px', minWidth: '220px' }}>
-                        <Volume2 size={24} color="#22d3ee" />
-                        <audio controls src={voiceUrl} style={{ height: '36px', width: '180px' }} />
+                      <div className="animated-bubble" style={{ padding: '10px 14px', borderRadius: '16px', background: 'linear-gradient(135deg, rgba(34,211,238,0.25), rgba(147,51,234,0.35))', border: '1px solid #22d3ee', display: 'flex', alignItems: 'center', gap: '10px', maxWidth: '85%', boxSizing: 'border-box' }}>
+                        <Volume2 size={22} color="#22d3ee" style={{ flexShrink: 0 }} />
+                        <audio controls src={voiceUrl} style={{ height: '34px', width: '190px', maxWidth: '60vw' }} />
                       </div>
                     ) : isCallRecord ? (
-                      <div style={{ margin: '0 auto', padding: '8px 16px', borderRadius: '999px', backgroundColor: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.4)', color: '#d8b4fe', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ margin: '0 auto', padding: '7px 14px', borderRadius: '999px', backgroundColor: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.4)', color: '#d8b4fe', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'center' }}>
                         {msg.content.includes('Video') ? <Video size={14} color="#f472b6" /> : <PhoneCall size={14} color="#22d3ee" />}
                         {msg.content}
                       </div>
                     ) : isLetter ? (
-                      <div onClick={() => setOpenedLetterId(isOpened ? null : msg.id)} className="animated-bubble" style={{ width: '100%', maxWidth: '300px', padding: '16px', borderRadius: '16px', background: 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(219,39,119,0.3))', border: '2px solid #c084fc', cursor: 'pointer', boxSizing: 'border-box' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                          <Mail size={22} color="#f472b6" />
-                          <span style={{ fontSize: '14px', fontWeight: 700, color: '#facc15' }}>{isOpened ? '💌 Ochilgan Maktub' : '💌 Maxfiy Maktub (Ochish)'}</span>
+                      <div onClick={() => setOpenedLetterId(isOpened ? null : msg.id)} className="animated-bubble" style={{ width: '100%', maxWidth: '290px', padding: '14px', borderRadius: '16px', background: 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(219,39,119,0.3))', border: '2px solid #c084fc', cursor: 'pointer', boxSizing: 'border-box' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                          <Mail size={20} color="#f472b6" />
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#facc15' }}>{isOpened ? '💌 Ochilgan Maktub' : '💌 Maxfiy Maktub (Ochish)'}</span>
                         </div>
-                        {isOpened && <div style={{ marginTop: '10px', padding: '12px', backgroundColor: '#09090b', borderRadius: '10px', fontSize: '13px', color: '#f3f4f6', lineHeight: '1.5', wordBreak: 'break-word' }}>{letterBody}</div>}
+                        {isOpened && <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#09090b', borderRadius: '10px', fontSize: '13px', color: '#f3f4f6', lineHeight: '1.5', wordBreak: 'break-word' }}>{letterBody}</div>}
                       </div>
                     ) : (
-                      <div className="animated-bubble" style={{ position: 'relative', maxWidth: '75%', padding: '12px 18px', borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: theme.bg, border: theme.border, boxSizing: 'border-box' }}>
-                        <div style={{ fontSize: '14px', color: '#f3f4f6', lineHeight: '1.5', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{msg.content}</div>
-                        <div style={{ fontSize: '10px', color: '#d8b4fe', marginTop: '6px', textAlign: 'right' }}>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ✓✓</div>
+                      <div className="animated-bubble mobile-bubble" style={{ position: 'relative', maxWidth: '75%', padding: '12px 16px', borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: theme.bg, border: theme.border, boxSizing: 'border-box' }}>
+                        <div style={{ fontSize: '14px', color: '#f3f4f6', lineHeight: '1.45', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                        <div style={{ fontSize: '10px', color: '#d8b4fe', marginTop: '5px', textAlign: 'right' }}>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ✓✓</div>
                       </div>
                     )}
                   </div>
@@ -1165,48 +1228,45 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* KONTAKTLAR VA YAQINLAR BO'LIMI (SERVER BILAN BOG'LANGAN) */}
+          {/* KONTAKTLAR VA YAQINLAR BO'LIMI */}
           {activeTab === 'contacts' && (
-            <div style={{ maxWidth: '850px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px', boxSizing: 'border-box' }}>
-              
-              {/* Mening ID ma'lumotim */}
-              <div style={{ padding: '14px 18px', borderRadius: '16px', backgroundColor: 'rgba(236, 72, 153, 0.12)', border: '1px solid rgba(236, 72, 153, 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                <div style={{ fontSize: '13px', color: '#f3f4f6' }}>
+            <div style={{ maxWidth: '850px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
+              <div style={{ padding: '12px 16px', borderRadius: '14px', backgroundColor: 'rgba(236, 72, 153, 0.12)', border: '1px solid rgba(236, 72, 153, 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ fontSize: '13px', color: '#f3f4f6', wordBreak: 'break-word' }}>
                   Sizning unikal ID manzilingiz (yaqiningizga yuboring): <strong style={{ color: '#22d3ee' }}>@{currentUser}</strong>
                 </div>
               </div>
 
-              {/* Yangi kontakt qo'shish kartochkasi */}
-              <div style={{ padding: '22px', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(56, 189, 248, 0.4)', boxSizing: 'border-box', boxShadow: '0 0 25px rgba(56, 189, 248, 0.1)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-                  <div style={{ padding: '10px', borderRadius: '12px', backgroundColor: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ padding: 'clamp(16px, 4vw, 22px)', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(56, 189, 248, 0.4)', boxSizing: 'border-box', boxShadow: '0 0 25px rgba(56, 189, 248, 0.1)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                  <div style={{ padding: '10px', borderRadius: '12px', backgroundColor: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <UserPlus size={20} />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#fff', margin: 0 }}>Yangi Kontakt Qo'shish</h2>
-                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>Juftingizning ID yoki Gmail manzilini kiriting — serverda saqlanadi</div>
+                    <h2 style={{ fontSize: '16px', fontWeight: 800, color: '#fff', margin: 0 }}>Yangi Kontakt Qo'shish</h2>
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>Juftingizning ID yoki Gmail manzilini kiriting</div>
                   </div>
                 </div>
 
-                <form onSubmit={handleAddContact} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '12px' }}>
+                <form onSubmit={handleAddContact} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginTop: '10px' }}>
                   <input
                     type="text"
                     value={newContactUsername}
                     onChange={(e) => setNewContactUsername(e.target.value)}
                     placeholder="ID yoki Email (masalan: @malikam)"
-                    style={{ padding: '12px 14px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(56, 189, 248, 0.35)', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(56, 189, 248, 0.35)', color: '#fff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
                   />
                   <input
                     type="text"
                     value={newContactName}
                     onChange={(e) => setNewContactName(e.target.value)}
                     placeholder="Ism (masalan: Malikam 💖)"
-                    style={{ padding: '12px 14px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(168, 85, 247, 0.35)', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(168, 85, 247, 0.35)', color: '#fff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
                   />
                   <button
                     type="submit"
                     disabled={isSavingContact}
-                    style={{ padding: '12px 20px', borderRadius: '12px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 0 15px rgba(236, 72, 153, 0.35)', opacity: isSavingContact ? 0.7 : 1 }}
+                    style={{ width: '100%', padding: '12px 18px', borderRadius: '12px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 0 15px rgba(236, 72, 153, 0.35)', opacity: isSavingContact ? 0.7 : 1, boxSizing: 'border-box' }}
                   >
                     <UserPlus size={18} /> {isSavingContact ? 'Saqlanmoqda...' : "Kontaktga qo'shish"}
                   </button>
@@ -1219,58 +1279,57 @@ export default function ChatPage() {
                 )}
               </div>
 
-              {/* Kontaktlar ro'yxati */}
-              <div style={{ padding: '22px', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', boxSizing: 'border-box' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ padding: 'clamp(16px, 4vw, 22px)', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', boxSizing: 'border-box' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ padding: '10px', borderRadius: '12px', backgroundColor: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ padding: '10px', borderRadius: '12px', backgroundColor: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <Users size={20} />
                     </div>
                     <div>
-                      <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#f472b6', margin: 0 }}>Mening Kontaktlarim</h3>
+                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#f472b6', margin: 0 }}>Mening Kontaktlarim</h3>
                       <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>Serverdagi ulangan yaqinlar: {contacts.length} ta</div>
                     </div>
                   </div>
                 </div>
 
                 {contacts.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#9ca3af', fontSize: '14px' }}>
+                  <div style={{ textAlign: 'center', padding: '30px 14px', color: '#9ca3af', fontSize: '14px' }}>
                     Hozircha kontaktlar ro'yxati bo'sh. Yuqoridan yaqiningizning ID yoki Emailini kiritib qo'shing! 💖
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {contacts.map((contact) => {
                       const isActive = selectedContact?.id === contact.id
                       return (
                         <div
                           key={contact.id}
+                          className="contact-card-row"
                           style={{
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            padding: '14px 16px',
+                            padding: '12px 14px',
                             borderRadius: '16px',
                             backgroundColor: isActive ? 'rgba(147, 51, 234, 0.18)' : '#0c0a14',
                             border: isActive ? '1px solid #ec4899' : '1px solid rgba(168, 85, 247, 0.3)',
                             gap: '12px',
-                            flexWrap: 'wrap',
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
-                            <div className="animated-avatar-ring" style={{ width: '48px', height: '48px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#18181b' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                            <div className="animated-avatar-ring" style={{ width: '44px', height: '44px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#18181b' }}>
                               <img src={contact.avatar} alt={contact.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             </div>
                             <div style={{ minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '15px', fontWeight: 700, color: '#fff' }}>{contact.name}</span>
-                                <Crown size={14} color="#facc15" />
+                                <span style={{ fontSize: '15px', fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.name}</span>
+                                <Crown size={14} color="#facc15" style={{ flexShrink: 0 }} />
                               </div>
-                              <div style={{ fontSize: '12px', color: '#38bdf8', marginTop: '2px' }}>@{contact.username}</div>
+                              <div style={{ fontSize: '12px', color: '#38bdf8', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{contact.username}</div>
                               <div style={{ fontSize: '11px', color: '#34d399', marginTop: '2px' }}>{contact.status}</div>
                             </div>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div className="contact-card-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                             <button
                               onClick={() => handleSelectContactForChat(contact)}
                               style={{
@@ -1318,12 +1377,12 @@ export default function ChatPage() {
 
           {activeTab === 'gifts' && (
             <div style={{ maxWidth: '900px', margin: '0 auto', width: '100%' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#f472b6', marginBottom: '12px' }}>🎁 Magik Sovg'alar Do'koni</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '14px' }}>
+              <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#f472b6', marginBottom: '12px' }}>🎁 Magik Sovg'alar Do'koni</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))', gap: '12px' }}>
                 {ALL_GIFTS.map((gift) => (
-                  <div key={gift.id} style={{ padding: '16px', borderRadius: '16px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.35)', textAlign: 'center', boxSizing: 'border-box' }}>
-                    <div style={{ fontSize: '42px', marginBottom: '8px' }}>{gift.emoji}</div>
-                    <div style={{ fontWeight: 700, fontSize: '14px', color: '#fff' }}>{gift.name}</div>
+                  <div key={gift.id} style={{ padding: '14px', borderRadius: '16px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.35)', textAlign: 'center', boxSizing: 'border-box' }}>
+                    <div style={{ fontSize: '38px', marginBottom: '6px' }}>{gift.emoji}</div>
+                    <div style={{ fontWeight: 700, fontSize: '13px', color: '#fff' }}>{gift.name}</div>
                     <button onClick={() => sendGift(gift.emoji, gift.name)} style={{ width: '100%', marginTop: '10px', padding: '9px', borderRadius: '10px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}>Yuborish ✨</button>
                   </div>
                 ))}
@@ -1332,17 +1391,17 @@ export default function ChatPage() {
           )}
 
           {activeTab === 'letters' && (
-            <div style={{ maxWidth: '700px', margin: '0 auto', width: '100%', padding: '24px', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', boxSizing: 'border-box' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#f472b6', marginBottom: '12px' }}>Maxfiy Sevgi Maktubi</h2>
-              <textarea value={letterText} onChange={(e) => setLetterText(e.target.value)} placeholder="Maktub matni..." rows={5} style={{ width: '100%', padding: '14px', borderRadius: '14px', backgroundColor: '#09090b', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#fff', marginBottom: '16px', outline: 'none', boxSizing: 'border-box', fontSize: '14px' }} />
+            <div style={{ maxWidth: '700px', margin: '0 auto', width: '100%', padding: 'clamp(16px, 4vw, 24px)', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', boxSizing: 'border-box' }}>
+              <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#f472b6', marginBottom: '12px' }}>Maxfiy Sevgi Maktubi</h2>
+              <textarea value={letterText} onChange={(e) => setLetterText(e.target.value)} placeholder="Maktub matni..." rows={5} style={{ width: '100%', padding: '12px', borderRadius: '14px', backgroundColor: '#09090b', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#fff', marginBottom: '14px', outline: 'none', boxSizing: 'border-box', fontSize: '16px' }} />
               <button onClick={sendLoveLetter} style={{ width: '100%', padding: '13px', borderRadius: '14px', border: 'none', background: 'linear-gradient(to right, #9333ea, #db2777)', color: '#fff', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}>Maktubni Yuborish 💌</button>
             </div>
           )}
 
           {activeTab === 'gallery' && (
-            <div style={{ maxWidth: '900px', margin: '0 auto', width: '100%', padding: '24px', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(52, 211, 153, 0.4)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#34d399', margin: 0 }}>📸 Xotiralar Albomi</h2>
-              
+            <div style={{ maxWidth: '900px', margin: '0 auto', width: '100%', padding: 'clamp(16px, 4vw, 24px)', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(52, 211, 153, 0.4)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#34d399', margin: 0 }}>📸 Xotiralar Albomi</h2>
+
               <div>
                 <label
                   style={{
@@ -1350,7 +1409,7 @@ export default function ChatPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '10px',
-                    padding: '14px',
+                    padding: '13px',
                     borderRadius: '14px',
                     backgroundColor: 'rgba(52, 211, 153, 0.15)',
                     border: '1px dashed rgba(52, 211, 153, 0.6)',
@@ -1368,7 +1427,7 @@ export default function ChatPage() {
               {memories.length === 0 ? (
                 <div
                   style={{
-                    padding: '40px 20px',
+                    padding: '32px 16px',
                     borderRadius: '16px',
                     backgroundColor: 'rgba(52, 211, 153, 0.05)',
                     border: '1px solid rgba(52, 211, 153, 0.2)',
@@ -1377,11 +1436,11 @@ export default function ChatPage() {
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '12px',
+                    gap: '10px',
                   }}
                 >
-                  <span style={{ fontSize: '42px' }}>🥺💖</span>
-                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#34d399', letterSpacing: '1px' }}>
+                  <span style={{ fontSize: '38px' }}>🥺💖</span>
+                  <div style={{ fontSize: '18px', fontWeight: 800, color: '#34d399', letterSpacing: '1px' }}>
                     "I Miss You so much..." ✨
                   </div>
                   <div style={{ fontSize: '13px', color: '#9ca3af', maxWidth: '350px', lineHeight: '1.5' }}>
@@ -1389,9 +1448,9 @@ export default function ChatPage() {
                   </div>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))', gap: '10px' }}>
                   {memories.map((url, idx) => (
-                    <div key={idx} style={{ height: '160px', borderRadius: '14px', overflow: 'hidden', border: '1px solid rgba(52, 211, 153, 0.3)', boxSizing: 'border-box' }}><img src={url} alt="Memory" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
+                    <div key={idx} style={{ height: '145px', borderRadius: '14px', overflow: 'hidden', border: '1px solid rgba(52, 211, 153, 0.3)', boxSizing: 'border-box' }}><img src={url} alt="Memory" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
                   ))}
                 </div>
               )}
@@ -1399,55 +1458,55 @@ export default function ChatPage() {
           )}
 
           {activeTab === 'couple' && (
-            <div style={{ maxWidth: '800px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px', boxSizing: 'border-box' }}>
+            <div style={{ maxWidth: '800px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
               <div
                 style={{
-                  padding: '36px 20px',
+                  padding: 'clamp(22px, 5vw, 36px) 16px',
                   borderRadius: '24px',
                   background: 'linear-gradient(135deg, rgba(88,28,135,0.5), rgba(131,24,67,0.4))',
                   border: '1px solid rgba(236, 72, 153, 0.5)',
                   textAlign: 'center',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', marginBottom: '16px' }}>
-                  <span style={{ fontSize: '38px' }}>💖</span>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
+                  <span style={{ fontSize: 'clamp(28px, 7vw, 38px)' }}>💖</span>
                   <div
                     style={{
-                      padding: '8px 18px',
+                      padding: '7px 16px',
                       borderRadius: '999px',
                       background: 'linear-gradient(to right, #ec4899, #9333ea)',
                       color: '#fff',
                       fontWeight: 800,
-                      fontSize: '16px',
+                      fontSize: '14px',
                       letterSpacing: '2px',
                       boxShadow: '0 0 20px rgba(236,72,153,0.8)',
                     }}
                   >
                     LOVE ✨
                   </div>
-                  <span style={{ fontSize: '38px' }}>💘</span>
+                  <span style={{ fontSize: 'clamp(28px, 7vw, 38px)' }}>💘</span>
                 </div>
 
-                <div style={{ fontSize: '15px', fontWeight: 700, color: '#f472b6', marginBottom: '8px' }}>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#f472b6', marginBottom: '8px' }}>
                   {relationshipStarted ? '💖 Sevgi vaqti soniyama-soniya o\'lchanmoqda...' : '⏳ Suhbat kutilmoqda'}
                 </div>
 
-                <div style={{ fontSize: '26px', fontWeight: 800, color: '#fff', letterSpacing: '1px', wordBreak: 'break-word' }}>
+                <div style={{ fontSize: 'clamp(17px, 4.8vw, 26px)', fontWeight: 800, color: '#fff', letterSpacing: '0.5px', wordBreak: 'break-word' }}>
                   {days} kun : {hours} soat : {minutes} daqiqa : {seconds} soniya
                 </div>
               </div>
 
               <div
                 style={{
-                  padding: '24px',
+                  padding: 'clamp(16px, 4vw, 24px)',
                   borderRadius: '24px',
                   backgroundColor: '#140c22',
                   border: '2px solid rgba(234, 179, 8, 0.5)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-                  <Crown size={26} color="#facc15" />
-                  <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#facc15', margin: 0 }}>
+                  <Crown size={24} color="#facc15" style={{ flexShrink: 0 }} />
+                  <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#facc15', margin: 0 }}>
                     Linksy Premium Imkoniyatlari
                   </h2>
                 </div>
@@ -1468,10 +1527,10 @@ export default function ChatPage() {
           )}
 
           {activeTab === 'profile' && (
-            <div style={{ maxWidth: '800px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px', boxSizing: 'border-box' }}>
+            <div style={{ maxWidth: '800px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
               <div
                 style={{
-                  padding: '24px',
+                  padding: '20px 16px',
                   borderRadius: '24px',
                   backgroundColor: '#18181b',
                   border: '1px solid rgba(168, 85, 247, 0.4)',
@@ -1484,14 +1543,14 @@ export default function ChatPage() {
                 <div
                   onClick={() => setIsAvatarModalOpen(true)}
                   className="animated-avatar-ring"
-                  style={{ position: 'relative', width: '95px', height: '95px', borderRadius: '50%', overflow: 'hidden', marginBottom: '12px', cursor: 'zoom-in' }}
+                  style={{ position: 'relative', width: '88px', height: '88px', borderRadius: '50%', overflow: 'hidden', marginBottom: '12px', cursor: 'zoom-in' }}
                   title="Rasmni katta qilib ko'rish"
                 >
                   <img src={profileAvatar} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
 
-                <div style={{ fontSize: '18px', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  {profileName} 
+                <div style={{ fontSize: '17px', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  {profileName}
                   <CheckCircle2 size={16} style={{ fill: 'url(#gradient-check-prof)', color: '#fff' }} />
                   <svg width="0" height="0">
                     <linearGradient id="gradient-check-prof" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -1505,15 +1564,15 @@ export default function ChatPage() {
                 </div>
 
                 <div style={{ fontSize: '13px', color: '#22d3ee', marginTop: '4px' }}>ID: @{currentUser}</div>
-                <div style={{ fontSize: '13px', color: '#9ca3af', marginTop: '8px', fontStyle: 'italic', wordBreak: 'break-word', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                  "{profileBio}" <CheckCircle2 size={14} style={{ fill: '#34d399', color: '#fff' }} />
+                <div style={{ fontSize: '13px', color: '#9ca3af', marginTop: '8px', fontStyle: 'italic', wordBreak: 'break-word', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  "{profileBio}" <CheckCircle2 size={14} style={{ fill: '#34d399', color: '#fff', flexShrink: 0 }} />
                 </div>
               </div>
 
               {/* PROFILNI TAHRIRLASH */}
               <div
                 style={{
-                  padding: '20px',
+                  padding: '18px 16px',
                   borderRadius: '20px',
                   backgroundColor: '#18181b',
                   border: '1px solid rgba(168, 85, 247, 0.3)',
@@ -1522,7 +1581,7 @@ export default function ChatPage() {
                   gap: '14px',
                 }}
               >
-                <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#f472b6', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#f472b6', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Settings size={18} /> Profilni Tahrirlash
                 </h3>
 
@@ -1555,34 +1614,34 @@ export default function ChatPage() {
                     type="text"
                     value={profileName}
                     onChange={(e) => setProfileName(e.target.value)}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(168,85,247,0.3)', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(168,85,247,0.3)', color: '#fff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '12px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Bio (Status / Tavsif) - Yonida galichka bilan saqlanadi:</label>
+                  <label style={{ fontSize: '12px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Bio (Status / Tavsif):</label>
                   <input
                     type="text"
                     value={profileBio}
                     onChange={(e) => handleBioChange(e.target.value)}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(168,85,247,0.3)', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(168,85,247,0.3)', color: '#fff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
                   />
                 </div>
               </div>
 
-              {/* TARTIBLI MAXFIYLIK BO'LIMI */}
+              {/* MAXFIYLIK BO'LIMI */}
               <div
                 style={{
-                  padding: '20px',
+                  padding: '18px 16px',
                   borderRadius: '20px',
                   backgroundColor: '#18181b',
                   border: '1px solid rgba(236, 72, 153, 0.4)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '16px',
+                  gap: '12px',
                 }}
               >
-                <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#f472b6', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#f472b6', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Shield size={18} /> Maxfiylik Sozlamalari
                 </h3>
 
@@ -1590,14 +1649,14 @@ export default function ChatPage() {
                 <div style={{ backgroundColor: '#0c0a14', borderRadius: '14px', border: '1px solid rgba(34, 211, 238, 0.3)', overflow: 'hidden' }}>
                   <div
                     onClick={() => setOnlineMenuOpen(!onlineMenuOpen)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', cursor: 'pointer' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(34, 211, 238, 0.15)', color: '#22d3ee' }}>
                         <Eye size={18} />
                       </div>
                       <div>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>Online holatini ko'rish</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>Online holatini ko'rish</div>
                         <div style={{ fontSize: '11px', color: '#22d3ee', textTransform: 'capitalize' }}>Tanlangan: {onlineStatus}</div>
                       </div>
                     </div>
@@ -1605,7 +1664,7 @@ export default function ChatPage() {
                   </div>
 
                   {onlineMenuOpen && (
-                    <div style={{ padding: '0 16px 14px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ padding: '0 14px 12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {[
                         { id: 'all', label: 'Hamma' },
                         { id: 'contacts', label: 'Faqat Kontaktlar' },
@@ -1637,14 +1696,14 @@ export default function ChatPage() {
                 <div style={{ backgroundColor: '#0c0a14', borderRadius: '14px', border: '1px solid rgba(236, 72, 153, 0.3)', overflow: 'hidden' }}>
                   <div
                     onClick={() => setMessageMenuOpen(!messageMenuOpen)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', cursor: 'pointer' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(236, 72, 153, 0.15)', color: '#f472b6' }}>
                         <Lock size={18} />
                       </div>
                       <div>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>Kimlar xabar yoza oladi</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>Kimlar xabar yoza oladi</div>
                         <div style={{ fontSize: '11px', color: '#f472b6', textTransform: 'capitalize' }}>Tanlangan: {messagePermission}</div>
                       </div>
                     </div>
@@ -1652,7 +1711,7 @@ export default function ChatPage() {
                   </div>
 
                   {messageMenuOpen && (
-                    <div style={{ padding: '0 16px 14px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ padding: '0 14px 12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {[
                         { id: 'all', label: 'Hamma' },
                         { id: 'contacts', label: 'Faqat Kontaktlar' },
@@ -1684,14 +1743,14 @@ export default function ChatPage() {
                 <div style={{ backgroundColor: '#0c0a14', borderRadius: '14px', border: '1px solid rgba(168, 85, 247, 0.3)', overflow: 'hidden' }}>
                   <div
                     onClick={() => setCallMenuOpen(!callMenuOpen)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', cursor: 'pointer' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' }}>
                         <PhoneCall size={18} />
                       </div>
                       <div>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>Kimlar qo'ng'iroq qila oladi</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>Kimlar qo'ng'iroq qila oladi</div>
                         <div style={{ fontSize: '11px', color: '#c084fc', textTransform: 'capitalize' }}>Tanlangan: {callPermission}</div>
                       </div>
                     </div>
@@ -1699,7 +1758,7 @@ export default function ChatPage() {
                   </div>
 
                   {callMenuOpen && (
-                    <div style={{ padding: '0 16px 14px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ padding: '0 14px 12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {[
                         { id: 'all', label: 'Hamma' },
                         { id: 'contacts', label: 'Faqat Kontaktlar' },
@@ -1728,19 +1787,19 @@ export default function ChatPage() {
                 </div>
 
                 {/* Ilova paroli */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', backgroundColor: '#0c0a14', borderRadius: '14px', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', backgroundColor: '#0c0a14', borderRadius: '14px', border: '1px solid rgba(234, 179, 8, 0.3)', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(234, 179, 8, 0.15)', color: '#facc15' }}>
                       <KeyRound size={18} />
                     </div>
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>Ilova paroli (App Lock)</div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>Ilova paroli (App Lock)</div>
                       <div style={{ fontSize: '11px', color: '#9ca3af' }}>Maxfiylikni kuchaytirish</div>
                     </div>
                   </div>
                   <button
                     onClick={() => setAppLockEnabled(!appLockEnabled)}
-                    style={{ padding: '6px 14px', borderRadius: '10px', backgroundColor: appLockEnabled ? '#f59e0b' : '#27272a', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}
+                    style={{ padding: '6px 12px', borderRadius: '10px', backgroundColor: appLockEnabled ? '#f59e0b' : '#27272a', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600, flexShrink: 0 }}
                   >
                     {appLockEnabled ? 'Yoqilgan' : 'O\'chirilgan'}
                   </button>
@@ -1752,18 +1811,18 @@ export default function ChatPage() {
 
         {/* INPUT QISMI */}
         {activeTab === 'chat' && (
-          <div style={{ position: 'relative', flexShrink: '0', maxWidth: '900px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ position: 'relative', flexShrink: 0, maxWidth: '900px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
             {showEmojiPicker && (
-              <div style={{ position: 'absolute', bottom: '100%', left: '16px', right: '16px', backgroundColor: '#121019', border: '1px solid rgba(168,85,247,0.4)', borderRadius: '16px', padding: '12px', display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px', zIndex: 40, boxShadow: '0 -4px 20px rgba(0,0,0,0.5)' }}>
+              <div style={{ position: 'absolute', bottom: '100%', left: '10px', right: '10px', maxHeight: '220px', overflowY: 'auto', backgroundColor: '#121019', border: '1px solid rgba(168,85,247,0.4)', borderRadius: '16px', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(40px, 1fr))', gap: '6px', zIndex: 40, boxShadow: '0 -4px 20px rgba(0,0,0,0.5)' }}>
                 {EMOJI_LIST.map((emoji, idx) => (
-                  <button key={idx} onClick={() => addEmojiToInput(emoji)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', padding: '6px', borderRadius: '8px', textAlign: 'center' }}>{emoji}</button>
+                  <button key={idx} onClick={() => addEmojiToInput(emoji)} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', padding: '4px', borderRadius: '8px', textAlign: 'center' }}>{emoji}</button>
                 ))}
               </div>
             )}
 
             {showStickerPicker && (
-              <div style={{ position: 'absolute', bottom: '100%', left: '16px', right: '16px', backgroundColor: '#121019', border: '1px solid rgba(236,72,153,0.4)', borderRadius: '16px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 40, boxShadow: '0 -4px 20px rgba(0,0,0,0.5)' }}>
-                <div style={{ fontSize: '12px', color: '#f472b6', fontWeight: 700, marginBottom: '4px' }}>✨ Sevgi Stikerlarini tanlang:</div>
+              <div style={{ position: 'absolute', bottom: '100%', left: '10px', right: '10px', maxHeight: '240px', overflowY: 'auto', backgroundColor: '#121019', border: '1px solid rgba(236,72,153,0.4)', borderRadius: '16px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 40, boxShadow: '0 -4px 20px rgba(0,0,0,0.5)' }}>
+                <div style={{ fontSize: '12px', color: '#f472b6', fontWeight: 700, marginBottom: '2px' }}>✨ Sevgi Stikerlarini tanlang:</div>
                 {LOVE_STICKERS.map((st) => (
                   <button key={st.id} onClick={() => sendSticker(st.content)} style={{ padding: '10px', borderRadius: '12px', border: '1px solid rgba(236,72,153,0.3)', backgroundColor: 'rgba(236,72,153,0.15)', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}>
                     {st.label}
@@ -1772,11 +1831,11 @@ export default function ChatPage() {
               </div>
             )}
 
-            <form onSubmit={sendMessage} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', borderTop: '1px solid rgba(147, 51, 234, 0.3)', backgroundColor: '#0c0a14', boxSizing: 'border-box' }}>
-              <button type="button" onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowStickerPicker(false); }} style={{ background: 'none', border: 'none', color: '#f472b6', cursor: 'pointer', padding: '4px', flexShrink: 0 }} title="Emojilar">
-                <Smile size={22} />
+            <form onSubmit={sendMessage} className="mobile-input-form" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderTop: '1px solid rgba(147, 51, 234, 0.3)', backgroundColor: '#0c0a14', boxSizing: 'border-box' }}>
+              <button type="button" onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowStickerPicker(false); }} style={{ background: 'none', border: 'none', color: '#f472b6', cursor: 'pointer', padding: '4px', flexShrink: 0, display: 'flex', alignItems: 'center' }} title="Emojilar">
+                <Smile size={21} />
               </button>
-              <button type="button" onClick={() => { setShowStickerPicker(!showStickerPicker); setShowEmojiPicker(false); }} style={{ background: 'none', border: 'none', color: '#c084fc', cursor: 'pointer', padding: '4px', fontSize: '18px', flexShrink: 0 }} title="Stikerlar">
+              <button type="button" onClick={() => { setShowStickerPicker(!showStickerPicker); setShowEmojiPicker(false); }} style={{ background: 'none', border: 'none', color: '#c084fc', cursor: 'pointer', padding: '4px', fontSize: '17px', flexShrink: 0, display: 'flex', alignItems: 'center' }} title="Stikerlar">
                 ✨
               </button>
 
@@ -1784,18 +1843,18 @@ export default function ChatPage() {
                 <button
                   type="button"
                   onClick={stopRecording}
-                  style={{ padding: '10px 14px', borderRadius: '12px', border: 'none', backgroundColor: '#ef4444', color: '#fff', fontWeight: 700, fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', animation: 'pulse 1s infinite' }}
+                  style={{ padding: '8px 10px', borderRadius: '10px', border: 'none', backgroundColor: '#ef4444', color: '#fff', fontWeight: 700, fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}
                 >
-                  <Square size={16} /> To'xtatish
+                  <Square size={14} /> Stop
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={startRecording}
-                  style={{ background: 'none', border: 'none', color: '#22d3ee', cursor: 'pointer', padding: '4px', flexShrink: 0 }}
+                  style={{ background: 'none', border: 'none', color: '#22d3ee', cursor: 'pointer', padding: '4px', flexShrink: 0, display: 'flex', alignItems: 'center' }}
                   title="Ovozli xabar yozish"
                 >
-                  <Mic size={22} />
+                  <Mic size={21} />
                 </button>
               )}
 
@@ -1803,10 +1862,10 @@ export default function ChatPage() {
                 type="text"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={selectedContact ? `${selectedContact.name} ga xabar yozing... 💌` : 'Sehrli xabar yozing... 🏰💌'}
-                style={{ flex: 1, minWidth: 0, padding: '12px 16px', borderRadius: '14px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#ffffff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                placeholder={selectedContact ? `${selectedContact.name} ga yozing...` : 'Xabar yozing... 💌'}
+                style={{ flex: 1, minWidth: 0, padding: '10px 14px', borderRadius: '14px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#ffffff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
               />
-              <button type="submit" style={{ padding: '12px 20px', borderRadius: '14px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#ffffff', fontWeight: 600, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button type="submit" className="mobile-send-btn" style={{ padding: '11px 18px', borderRadius: '14px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#ffffff', fontWeight: 600, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Send size={18} />
               </button>
             </form>
@@ -1814,12 +1873,12 @@ export default function ChatPage() {
         )}
 
         {/* NAVIGATION BAR */}
-        <nav style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', borderTop: '1px solid rgba(147, 51, 234, 0.3)', backgroundColor: '#09090b', padding: '10px 16px', flexShrink: 0, boxSizing: 'border-box', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
-          <button onClick={() => setActiveTab('chat')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'chat' ? '#22d3ee' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}><MessageCircle size={20} /> Suhbat</button>
-          <button onClick={() => setActiveTab('contacts')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'contacts' ? '#38bdf8' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}><Users size={20} /> Kontaktlar</button>
-          <button onClick={() => setActiveTab('gifts')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'gifts' ? '#f472b6' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}><Gift size={20} /> Sovg'alar</button>
-          <button onClick={() => setActiveTab('couple')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'couple' ? '#c084fc' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}><CalendarHeart size={20} /> Juftlik</button>
-          <button onClick={() => setActiveTab('profile')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'profile' ? '#facc15' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}><User size={20} /> Profil</button>
+        <nav className="mobile-nav" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', borderTop: '1px solid rgba(147, 51, 234, 0.3)', backgroundColor: '#09090b', padding: '10px 12px', flexShrink: 0, boxSizing: 'border-box', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
+          <button onClick={() => setActiveTab('chat')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'chat' ? '#22d3ee' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '2px 0' }}><MessageCircle size={19} /> Suhbat</button>
+          <button onClick={() => setActiveTab('contacts')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'contacts' ? '#38bdf8' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '2px 0' }}><Users size={19} /> Kontaktlar</button>
+          <button onClick={() => setActiveTab('gifts')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'gifts' ? '#f472b6' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '2px 0' }}><Gift size={19} /> Sovg'alar</button>
+          <button onClick={() => setActiveTab('couple')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'couple' ? '#c084fc' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '2px 0' }}><CalendarHeart size={19} /> Juftlik</button>
+          <button onClick={() => setActiveTab('profile')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'profile' ? '#facc15' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '2px 0' }}><User size={19} /> Profil</button>
         </nav>
       </div>
     </div>
