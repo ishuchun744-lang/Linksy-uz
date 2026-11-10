@@ -20,6 +20,27 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Supabase setup
+
+The chat uses Supabase Auth sessions for access to messages and contacts. Username/password authentication is handled by the `username-auth` Edge Function; passwords are never stored in the `messages` table or browser storage.
+
+1. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`. The browser key must be a Supabase publishable/anon key, never a secret or service-role key.
+2. Link this repository to the Supabase project and apply the database migration:
+
+   ```bash
+   supabase link --project-ref <your-project-ref>
+   supabase db push
+   ```
+
+3. In the Supabase Dashboard, set the Edge Function secret `LINKSY_SUPABASE_SERVICE_ROLE_KEY` to the project's service-role/secret key. Keep it only in Supabase's server-side secrets; never add it to `.env.local` or client code.
+4. Deploy the function:
+
+   ```bash
+   supabase functions deploy username-auth
+   ```
+
+The migration restricts `messages` and `contacts` with row-level security and enables message Realtime. Existing username accounts are migrated on their first login using their existing ID and password; their old plaintext registration row is deleted after migration. New passwords must be at least 8 characters. Legacy migration attempts are rate-limited.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

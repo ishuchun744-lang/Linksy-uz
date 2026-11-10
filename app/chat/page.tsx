@@ -1,10 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
-import * as THREE from 'three'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import Image from 'next/image'
 import {
   Send,
   Crown,
@@ -20,29 +18,35 @@ import {
   Trash2,
   Mail,
   Image as ImageIcon,
-  Smile,
-  Settings,
-  Camera,
-  Lock,
-  Eye,
-  Shield,
-  ChevronRight,
   PhoneCall,
   Video,
+  VideoOff,
   PhoneOff,
   Mic,
   MicOff,
-  VideoOff,
-  KeyRound,
-  Plus,
-  Square,
-  Volume2,
   CheckCircle2,
+  ArrowLeft,
+  Copy,
+  Check,
+  Search,
+  Pin,
+  Smile,
+  Camera,
+  VolumeX,
 } from 'lucide-react'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://uviwunmtbfyrtywllvrk.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_z1L2-JOxWEZswqyTqXXncQ_94mAgY2n'
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('NEXT_PUBLIC_SUPABASE_URL va NEXT_PUBLIC_SUPABASE_ANON_KEY sozlanishi kerak.')
+}
+const supabaseClientCache = globalThis as typeof globalThis & {
+  linksySupabaseClient?: SupabaseClient
+}
+const supabase = supabaseClientCache.linksySupabaseClient ?? createClient(supabaseUrl, supabaseAnonKey)
+if (process.env.NODE_ENV !== 'production') {
+  supabaseClientCache.linksySupabaseClient = supabase
+}
 
 interface Message {
   id: string
@@ -59,6 +63,54 @@ interface ContactItem {
   name: string
   avatar: string
   status: string
+  isMuted?: boolean
+  isPinned?: boolean
+}
+
+interface ContactRow {
+  id: string
+  owner_id: string
+  contact_username: string
+  contact_name: string
+  avatar: string | null
+  status: string | null
+}
+
+interface UsernameAuthResponse {
+  username: string
+  session: {
+    access_token: string
+    refresh_token: string
+  }
+}
+
+interface UsernameLinkResponse {
+  username: string
+}
+
+type AppTab = 'chat' | 'contacts' | 'gifts' | 'couple' | 'profile' | 'letters' | 'gallery'
+type RealtimeStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+
+const getDefaultAvatar = (username: string) =>
+  `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(username)}&backgroundColor=b6e3f4,c0aede,f472b6`
+
+const quotePostgrestValue = (value: string) =>
+  `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+
+const getFunctionErrorCode = async (error: unknown): Promise<string | null> => {
+  if (typeof error !== 'object' || error === null || !('context' in error)) return null
+  const context = error.context
+  if (!(context instanceof Response)) return null
+
+  try {
+    const body: unknown = await context.clone().json()
+    if (typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string') {
+      return body.error
+    }
+  } catch (parseError) {
+    console.error('Auth server error response could not be parsed:', parseError)
+  }
+  return null
 }
 
 const ALL_GIFTS = [
@@ -81,49 +133,28 @@ const LOVE_STICKERS = [
   { id: 'st4', label: '🔥 Yonmoqdaman', content: '🔥❤️ [STIKER: QALBIM YONMOQDA] ❤️🔥' },
 ]
 
-function SpinningDiamond() {
-  const meshRef = useRef<THREE.Mesh>(null)
-
-  useFrame((state, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += delta * 1.2
-      meshRef.current.rotation.x += delta * 0.5
-    }
-  })
-
-  return (
-    <mesh ref={meshRef}>
-      <octahedronGeometry args={[1.8, 0]} />
-      <meshStandardMaterial
-        color="#ec4899"
-        emissive="#9333ea"
-        roughness={0.1}
-        metalness={0.9}
-        wireframe={false}
-      />
-    </mesh>
-  )
-}
-
 export default function ChatPage() {
   const [isAppLoaded, setIsAppLoaded] = useState(false)
-
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register')
   const [inputUsername, setInputUsername] = useState('')
   const [inputPassword, setInputPassword] = useState('')
   const [authError, setAuthError] = useState('')
 
-  const [activeTab, setActiveTab] = useState<'chat' | 'contacts' | 'gifts' | 'couple' | 'profile' | 'letters' | 'gallery'>('chat')
+  const [activeTab, setActiveTab] = useState<AppTab>('chat')
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [chatSearchQuery, setChatSearchQuery] = useState('')
+
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [currentUser, setCurrentUser] = useState<string>('')
   const [profileName, setProfileName] = useState('Shahzoda')
-  const [profileId, setProfileId] = useState('@linksy_prince')
   const [profileBio, setProfileBio] = useState('Sevgi va sadoqat ila yashaymiz ✨💖')
   const [profileAvatar, setProfileAvatar] = useState('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60')
   const [bubbleTheme, setBubbleTheme] = useState<'purple' | 'pink' | 'gold'>('purple')
 
-  // KONTAKTLAR VA TANLANGAN SUHBATDOSH (SERVER BILAN)
+  const [userProfiles, setUserProfiles] = useState<Record<string, { avatar?: string; bio?: string }>>({})
+  const [registeredUsers, setRegisteredUsers] = useState<string[]>([])
+
   const [contacts, setContacts] = useState<ContactItem[]>([])
   const [selectedContact, setSelectedContact] = useState<ContactItem | null>(null)
   const [newContactUsername, setNewContactUsername] = useState('')
@@ -131,18 +162,25 @@ export default function ChatPage() {
   const [contactFeedback, setContactFeedback] = useState('')
   const [isSavingContact, setIsSavingContact] = useState(false)
 
+  const [viewingUserProfile, setViewingUserProfile] = useState<ContactItem | null>(null)
+  const [copiedId, setCopiedId] = useState(false)
+  const [quickSaveName, setQuickSaveName] = useState('')
+  const [quickSaveSuccess, setQuickSaveSuccess] = useState('')
+
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false)
+  const [zoomedAvatarUrl, setZoomedAvatarUrl] = useState('')
 
-  const [onlineMenuOpen, setOnlineMenuOpen] = useState(false)
-  const [messageMenuOpen, setMessageMenuOpen] = useState(false)
-  const [callMenuOpen, setCallMenuOpen] = useState(false)
-
-  const [onlineStatus, setOnlineStatus] = useState<'all' | 'contacts' | 'nobody'>('all')
   const [messagePermission, setMessagePermission] = useState<'all' | 'contacts' | 'nobody'>('all')
   const [callPermission, setCallPermission] = useState<'all' | 'contacts' | 'nobody'>('all')
-  const [appLockEnabled, setAppLockEnabled] = useState(false)
 
   const [messages, setMessages] = useState<Message[]>([])
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting')
+  const [messageSyncError, setMessageSyncError] = useState('')
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [mutedChats, setMutedChats] = useState<Record<string, boolean>>({})
+  const [pinnedChats, setPinnedChats] = useState<Record<string, boolean>>({})
+
   const [newMessage, setNewMessage] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showStickerPicker, setShowStickerPicker] = useState(false)
@@ -158,7 +196,6 @@ export default function ChatPage() {
   const audioChunksRef = useRef<Blob[]>([])
 
   const [activeAnimationGift, setActiveAnimationGift] = useState<{ emoji: string; name: string; is3D?: boolean } | null>(null)
-
   const [relationshipStarted, setRelationshipStarted] = useState<boolean>(true)
   const [secondsTogether, setSecondsTogether] = useState<number>(0)
 
@@ -167,63 +204,205 @@ export default function ChatPage() {
   const [memories, setMemories] = useState<string[]>([])
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const currentUserRef = useRef('')
+  const selectedContactRef = useRef<ContactItem | null>(null)
+  const relationshipStartedAtRef = useRef<number | null>(null)
+  const secondsTogetherRef = useRef(secondsTogether)
+  const activeTabRef = useRef(activeTab)
+  const isChatOpenRef = useRef(isChatOpen)
 
-  // SUPABASE'DAN KONTAKTLARNI YUKLASH
+  useEffect(() => {
+    currentUserRef.current = currentUser
+  }, [currentUser])
+
+  useEffect(() => {
+    selectedContactRef.current = selectedContact
+  }, [selectedContact])
+
+  useEffect(() => {
+    activeTabRef.current = activeTab
+    isChatOpenRef.current = isChatOpen
+  }, [activeTab, isChatOpen])
+
+  const getUserAvatar = (username: string, fallbackAvatar?: string) => {
+    const clean = username.toLowerCase()
+    if (clean === currentUser) return profileAvatar
+    if (userProfiles[clean]?.avatar) return userProfiles[clean].avatar!
+    if (fallbackAvatar) return fallbackAvatar
+    return getDefaultAvatar(clean)
+  }
+
+  const getUserBio = (username: string) => {
+    const clean = username.toLowerCase()
+    if (clean === currentUser) return profileBio
+    return userProfiles[clean]?.bio || 'Sevgi va sadoqat ila yashaymiz ✨💖'
+  }
+
   const fetchContacts = async (userId: string) => {
     if (!userId) return
+    const cleanOwner = userId.toLowerCase()
+    let localList: ContactItem[] = []
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`linksy_contacts_${cleanOwner}`)
+      if (saved) {
+        try {
+          const parsed: unknown = JSON.parse(saved)
+          if (Array.isArray(parsed)) localList = parsed as ContactItem[]
+        } catch (error) {
+          console.error('Mahalliy kontaktlarni o‘qib bo‘lmadi:', error)
+        }
+      }
+    }
+
     const { data, error } = await supabase
       .from('contacts')
       .select('*')
-      .eq('owner_id', userId)
+      .eq('owner_id', cleanOwner)
       .order('created_at', { ascending: false })
 
-    if (!error && data) {
-      const mapped: ContactItem[] = data.map((row: any) => ({
+    if (!error && data && data.length > 0) {
+      const mapped: ContactItem[] = data.map((row: ContactRow) => ({
         id: row.id,
         owner_id: row.owner_id,
         username: row.contact_username,
         name: row.contact_name,
-        avatar: row.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(row.contact_username)}&backgroundColor=b6e3f4,c0aede,f472b6`,
+        avatar: row.avatar || getDefaultAvatar(row.contact_username),
         status: row.status || 'Online ✨',
       }))
       setContacts(mapped)
-      if (mapped.length > 0 && !selectedContact) {
-        setSelectedContact(mapped[0])
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`linksy_contacts_${cleanOwner}`, JSON.stringify(mapped))
       }
+    } else {
+      if (error) console.error('Kontaktlarni yuklashda xatolik:', error.message)
+      setContacts(localList)
     }
   }
+
+  const fetchMessages = useCallback(async (loggedUser: string) => {
+    const activeUser = loggedUser.toLowerCase()
+    if (!activeUser) return
+
+    const userFilter = quotePostgrestValue(activeUser)
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .or(`sender_id.eq.${userFilter},receiver_id.eq.${userFilter},sender_id.eq.all,receiver_id.eq.all`)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Xabarlarni yuklashda xatolik:', error.message)
+      setMessageSyncError('Xabarlarni yuklab bo‘lmadi. Internet yoki Supabase sozlamalarini tekshiring.')
+      return
+    }
+
+    if (data && currentUserRef.current === activeUser) {
+      setMessageSyncError('')
+      const profilesMap: Record<string, { avatar?: string; bio?: string }> = {}
+      const regSet = new Set<string>()
+
+      data.forEach((m: Message) => {
+        const sId = (m.sender_id || '').toLowerCase()
+        if (sId && sId !== 'system') regSet.add(sId)
+
+        if (m.content.startsWith('PROFILE_AVATAR|')) {
+          profilesMap[sId] = { ...profilesMap[sId], avatar: m.content.replace('PROFILE_AVATAR|', '') }
+        } else if (m.content.startsWith('PROFILE_BIO|')) {
+          profilesMap[sId] = { ...profilesMap[sId], bio: m.content.replace('PROFILE_BIO|', '') }
+        } else if (m.content.startsWith('USER_REG|')) {
+          const parts = m.content.split('|')
+          if (parts[1]) regSet.add(parts[1].toLowerCase())
+        }
+      })
+
+      setUserProfiles((previous) => {
+        const previousKeys = Object.keys(previous)
+        const nextKeys = Object.keys(profilesMap)
+        if (
+          previousKeys.length === nextKeys.length &&
+          nextKeys.every(
+            (key) =>
+              previous[key]?.avatar === profilesMap[key]?.avatar &&
+              previous[key]?.bio === profilesMap[key]?.bio
+          )
+        ) {
+          return previous
+        }
+        return profilesMap
+      })
+      const nextRegisteredUsers = Array.from(regSet)
+      setRegisteredUsers((previous) =>
+        previous.length === nextRegisteredUsers.length &&
+        previous.every((username) => regSet.has(username))
+          ? previous
+          : nextRegisteredUsers
+      )
+
+      if (profilesMap[activeUser]?.avatar) setProfileAvatar(profilesMap[activeUser].avatar)
+      if (profilesMap[activeUser]?.bio) setProfileBio(profilesMap[activeUser].bio)
+
+      const filteredMessages = data.filter(
+        (m) =>
+          !m.content.startsWith('PROFILE_AVATAR|') &&
+          !m.content.startsWith('PROFILE_BIO|') &&
+          !m.content.startsWith('USER_REG|')
+      )
+      setMessages((previous) => {
+        const merged = new Map(previous.map((message) => [message.id, message]))
+        filteredMessages.forEach((message) => merged.set(message.id, message))
+        if (merged.size === previous.length) return previous
+        return Array.from(merged.values()).sort(
+          (left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
+        )
+      })
+
+      if (filteredMessages.length > 0) setRelationshipStarted(true)
+    }
+  }, [])
 
   useEffect(() => {
     const timer = setTimeout(() => setIsAppLoaded(true), 50)
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    let isMounted = true
+    void supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      if (!isMounted) return
+      if (error) console.error('Sessiyani tekshirishda xatolik:', error.message)
+
       if (session?.user) {
-        const emailId = (session.user.email?.split('@')[0] || 'google_user').toLowerCase()
-        setCurrentUser(emailId)
-        setProfileId(`@${emailId}`)
-        setProfileName(session.user.user_metadata?.full_name || emailId)
+        let username = session.user.user_metadata?.username
+        if (typeof username !== 'string' || !username) {
+          const { data, error: linkError } = await supabase.functions.invoke<UsernameLinkResponse>(
+            'username-auth',
+            { body: { action: 'link_oauth' } }
+          )
+          if (linkError) throw linkError
+          if (!data?.username) throw new Error('Google hisobiga foydalanuvchi ID biriktirilmadi.')
+          username = data.username
+        }
+
+        const cleanUsername = username.toLowerCase()
+        currentUserRef.current = cleanUsername
+        setCurrentUser(cleanUsername)
+        setProfileName(session.user.user_metadata?.full_name || cleanUsername)
         if (session.user.user_metadata?.avatar_url) {
           setProfileAvatar(session.user.user_metadata.avatar_url)
         }
         setIsAuthenticated(true)
-        fetchMessages()
-        fetchContacts(emailId)
+        void fetchMessages(cleanUsername)
+        void fetchContacts(cleanUsername)
 
-        if (typeof window !== 'undefined' && (window.location.hash || window.location.search)) {
+        if (window.location.hash || window.location.search) {
           window.history.replaceState(null, '', window.location.pathname)
         }
+        return
       }
-    })
 
-    const savedUser = localStorage.getItem('linksy_current_user')
-    if (savedUser) {
-      const cleanSaved = savedUser.toLowerCase()
-      setCurrentUser(cleanSaved)
-      setProfileId(`@${cleanSaved}`)
-      setIsAuthenticated(true)
-      fetchMessages()
-      fetchContacts(cleanSaved)
-    }
+      localStorage.removeItem('linksy_current_user')
+    }).catch((error: unknown) => {
+      if (!isMounted) return
+      console.error('Sessiyani tekshirishda kutilmagan xatolik:', error)
+      setAuthError('Hisobni yuklashda xatolik. Aloqa yoki Supabase sozlamalarini tekshiring.')
+    })
 
     const channel = supabase
       .channel('public:messages')
@@ -232,20 +411,37 @@ export default function ChatPage() {
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const incoming = payload.new as Message
+          const senderClean = (incoming.sender_id || '').toLowerCase()
+          const receiverClean = (incoming.receiver_id || '').toLowerCase()
 
           if (incoming.content.startsWith('PROFILE_AVATAR|')) {
             const avatarUrl = incoming.content.replace('PROFILE_AVATAR|', '')
-            setProfileAvatar(avatarUrl)
+            setUserProfiles((prev) => ({
+              ...prev,
+              [senderClean]: { ...prev[senderClean], avatar: avatarUrl },
+            }))
             return
           }
 
           if (incoming.content.startsWith('PROFILE_BIO|')) {
             const bioText = incoming.content.replace('PROFILE_BIO|', '')
-            setProfileBio(bioText)
+            setUserProfiles((prev) => ({
+              ...prev,
+              [senderClean]: { ...prev[senderClean], bio: bioText },
+            }))
             return
           }
 
           if (incoming.content.startsWith('USER_REG|')) {
+            const parts = incoming.content.split('|')
+            if (parts[1]) {
+              setRegisteredUsers((prev) => Array.from(new Set([...prev, parts[1].toLowerCase()])))
+            }
+            return
+          }
+
+          const activeUser = currentUserRef.current
+          if (!activeUser || (senderClean !== activeUser && receiverClean !== activeUser && receiverClean !== 'all')) {
             return
           }
 
@@ -253,59 +449,172 @@ export default function ChatPage() {
             if (prev.some((m) => m.id === incoming.id)) return prev
             return [...prev, incoming]
           })
+
+          if (senderClean && senderClean !== activeUser) {
+            const conversationId = receiverClean === 'all' ? 'all' : senderClean
+            const openConversation = selectedContactRef.current?.username.toLowerCase()
+            const isConversationOpen =
+              activeTabRef.current === 'chat' && isChatOpenRef.current && openConversation === conversationId
+
+            if (!isConversationOpen) {
+              setUnreadCounts((prev) => ({
+                ...prev,
+                [conversationId]: (prev[conversationId] || 0) + 1,
+              }))
+            }
+          }
+
           setRelationshipStarted(true)
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setRealtimeStatus('connected')
+          const activeUser = currentUserRef.current
+          if (activeUser) void fetchMessages(activeUser)
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setRealtimeStatus('error')
+        } else if (status === 'CLOSED') {
+          setRealtimeStatus('disconnected')
+        }
+      })
 
     return () => {
+      isMounted = false
       clearTimeout(timer)
       supabase.removeChannel(channel)
     }
-  }, [])
+  }, [fetchMessages])
 
   useEffect(() => {
-    let interval: any
-    if (relationshipStarted && isAuthenticated) {
-      interval = setInterval(() => {
-        setSecondsTogether((prev) => prev + 1)
-      }, 1000)
+    if (!relationshipStarted || !isAuthenticated) {
+      relationshipStartedAtRef.current = null
+      secondsTogetherRef.current = 0
+      return
     }
-    return () => clearInterval(interval)
-  }, [relationshipStarted, isAuthenticated])
+
+    if (relationshipStartedAtRef.current === null) {
+      relationshipStartedAtRef.current = Date.now() - secondsTogetherRef.current * 1000
+    }
+    if (activeTab !== 'couple') return
+
+    const updateElapsedTime = () => {
+      const startedAt = relationshipStartedAtRef.current
+      if (startedAt !== null) {
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000)
+        secondsTogetherRef.current = elapsed
+        setSecondsTogether(elapsed)
+      }
+    }
+    const interval = window.setInterval(updateElapsedTime, 1000)
+    return () => window.clearInterval(interval)
+  }, [relationshipStarted, isAuthenticated, activeTab])
 
   useEffect(() => {
-    if (activeTab === 'chat' && isAuthenticated) {
+    if (activeTab === 'chat' && isChatOpen && isAuthenticated) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [messages, activeTab, isAuthenticated, selectedContact])
+  }, [messages, activeTab, isChatOpen, isAuthenticated, selectedContact])
 
-  const fetchMessages = async () => {
-    const { data } = await supabase
-      .from('messages')
-      .select('*')
-      .order('created_at', { ascending: true })
+  useEffect(() => {
+    if (!currentUser) return
 
-    if (data) {
-      const filteredMessages = data.filter(
-        (m) =>
-          !m.content.startsWith('PROFILE_AVATAR|') &&
-          !m.content.startsWith('PROFILE_BIO|') &&
-          !m.content.startsWith('USER_REG|')
-      )
-      setMessages(filteredMessages)
+    const syncMessages = () => {
+      if (document.visibilityState === 'visible') void fetchMessages(currentUser)
+    }
 
-      if (filteredMessages.length > 0) setRelationshipStarted(true)
+    const interval = window.setInterval(syncMessages, 15000)
+    return () => window.clearInterval(interval)
+  }, [currentUser, fetchMessages])
 
-      const avatarMsg = data.slice().reverse().find((m) => m.content.startsWith('PROFILE_AVATAR|'))
-      if (avatarMsg) {
-        setProfileAvatar(avatarMsg.content.replace('PROFILE_AVATAR|', ''))
+  const openUserProfileModal = (username: string) => {
+    const cleanId = username.replace(/^@/, '').toLowerCase()
+    if (!cleanId) return
+
+    const existingContact = contacts.find((c) => c.username.toLowerCase() === cleanId)
+    const item: ContactItem = existingContact || {
+      id: cleanId,
+      username: cleanId,
+      name: cleanId === currentUser ? profileName : cleanId,
+      avatar: getUserAvatar(cleanId),
+      status: 'Online ✨',
+    }
+    setViewingUserProfile(item)
+    setQuickSaveName(existingContact ? existingContact.name : cleanId)
+    setCopiedId(false)
+    setQuickSaveSuccess('')
+  }
+
+  const handleCopyUserId = (username: string) => {
+    const clean = username.replace(/^@/, '')
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(`@${clean}`)
+      setCopiedId(true)
+      setTimeout(() => setCopiedId(false), 2500)
+    }
+  }
+
+  const saveContactUniversal = async (targetUsername: string, displayName: string) => {
+    const cleanId = targetUsername.replace(/^@/, '').toLowerCase()
+    const finalName = displayName.trim() || cleanId
+    const avatarUrl = getUserAvatar(cleanId)
+
+    const newItem: ContactItem = {
+      id: Date.now().toString(),
+      owner_id: currentUser,
+      username: cleanId,
+      name: finalName,
+      avatar: avatarUrl,
+      status: 'Online ✨',
+    }
+
+    const { data, error } = await supabase
+      .from('contacts')
+      .insert([
+        {
+          owner_id: currentUser,
+          contact_username: cleanId,
+          contact_name: finalName,
+          avatar: avatarUrl,
+          status: 'Online ✨',
+        },
+      ])
+      .select()
+
+    if (error) {
+      console.error('Kontaktni saqlashda xatolik:', error.message)
+      throw error
+    }
+
+    if (data && data.length > 0) {
+      newItem.id = data[0].id
+    }
+
+    const updated = [newItem, ...contacts.filter((c) => c.username.toLowerCase() !== cleanId)]
+    setContacts(updated)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`linksy_contacts_${currentUser}`, JSON.stringify(updated))
+    }
+    return newItem
+  }
+
+  const handleQuickSaveContact = async () => {
+    if (!viewingUserProfile) return
+    const cleanId = viewingUserProfile.username.toLowerCase()
+    if (cleanId === currentUser) return
+
+    setIsSavingContact(true)
+    try {
+      const savedItem = await saveContactUniversal(cleanId, quickSaveName)
+      setViewingUserProfile(savedItem)
+      if (selectedContact?.username.toLowerCase() === cleanId) {
+        setSelectedContact(savedItem)
       }
-
-      const bioMsg = data.slice().reverse().find((m) => m.content.startsWith('PROFILE_BIO|'))
-      if (bioMsg) {
-        setProfileBio(bioMsg.content.replace('PROFILE_BIO|', ''))
-      }
+      setQuickSaveSuccess('✅ Kontaktlarga muvaffaqiyatli saqlandi!')
+    } catch {
+      setQuickSaveSuccess('Kontaktni saqlab bo‘lmadi. Internet aloqasini tekshiring.')
+    } finally {
+      setIsSavingContact(false)
     }
   }
 
@@ -316,8 +625,8 @@ export default function ChatPage() {
     const rawInput = newContactUsername.trim().replace(/^@/, '').toLowerCase()
     const cleanId = rawInput.includes('@') ? rawInput.split('@')[0] : rawInput
 
-    if (!cleanId) {
-      setContactFeedback('Iltimos, foydalanuvchi ID yoki Emailini kiriting!')
+    if (!/^[a-z0-9._-]{3,30}$/.test(cleanId) || cleanId === 'system' || cleanId === 'all') {
+      setContactFeedback('To‘g‘ri foydalanuvchi ID kiriting (3–30 belgi, lotin harflari, raqam, . _ -).')
       return
     }
 
@@ -332,61 +641,61 @@ export default function ChatPage() {
     }
 
     setIsSavingContact(true)
-    const displayName = newContactName.trim() || cleanId
-    const avatarUrl = `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(cleanId)}&backgroundColor=b6e3f4,c0aede,f472b6`
-
-    const { data, error } = await supabase
-      .from('contacts')
-      .insert([
-        {
-          owner_id: currentUser,
-          contact_username: cleanId,
-          contact_name: displayName,
-          avatar: avatarUrl,
-          status: 'Online ✨',
-        },
-      ])
-      .select()
-
-    setIsSavingContact(false)
-
-    if (error) {
-      setContactFeedback('Xatolik yuz berdi: ' + error.message)
-      return
+    try {
+      const savedItem = await saveContactUniversal(cleanId, newContactName)
+      setSelectedContact(savedItem)
+      setNewContactUsername('')
+      setNewContactName('')
+      setContactFeedback('✅ Kontakt muvaffaqiyatli saqlandi!')
+      setTimeout(() => setContactFeedback(''), 3000)
+    } catch {
+      setContactFeedback('Kontaktni saqlab bo‘lmadi. Internet aloqasini tekshiring.')
+    } finally {
+      setIsSavingContact(false)
     }
-
-    if (data && data.length > 0) {
-      const row = data[0]
-      const newItem: ContactItem = {
-        id: row.id,
-        owner_id: row.owner_id,
-        username: row.contact_username,
-        name: row.contact_name,
-        avatar: row.avatar,
-        status: row.status,
-      }
-      const updated = [newItem, ...contacts]
-      setContacts(updated)
-      setSelectedContact(newItem)
-    }
-
-    setNewContactUsername('')
-    setNewContactName('')
-    setContactFeedback('✅ Kontakt serverga muvaffaqiyatli saqlandi!')
-    setTimeout(() => setContactFeedback(''), 3000)
   }
 
   const handleSelectContactForChat = (contact: ContactItem) => {
+    selectedContactRef.current = contact
     setSelectedContact(contact)
+    setNewMessage(drafts[contact.username.toLowerCase()] || '')
+    setUnreadCounts((prev) => ({ ...prev, [contact.username.toLowerCase()]: 0 }))
     setActiveTab('chat')
+    setIsChatOpen(true)
+  }
+
+  const toggleChatPreference = (username: string, preference: 'muted' | 'pinned') => {
+    const cleanUsername = username.toLowerCase()
+    if (preference === 'muted') {
+      setMutedChats((previous) => ({
+        ...previous,
+        [cleanUsername]: !previous[cleanUsername],
+      }))
+      return
+    }
+
+    setPinnedChats((previous) => ({
+      ...previous,
+      [cleanUsername]: !previous[cleanUsername],
+    }))
   }
 
   const handleDeleteContact = async (id: string) => {
-    await supabase.from('contacts').delete().eq('id', id)
+    const { error } = await supabase.from('contacts').delete().eq('id', id)
+    if (error) {
+      console.error('Kontaktni o‘chirishda xatolik:', error.message)
+      setContactFeedback('Kontaktni o‘chirib bo‘lmadi. Internet aloqasini tekshiring.')
+      return
+    }
+
     const updated = contacts.filter((c) => c.id !== id)
     setContacts(updated)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`linksy_contacts_${currentUser}`, JSON.stringify(updated))
+    }
     if (selectedContact?.id === id) {
-      setSelectedContact(updated.length > 0 ? updated[0] : null)
+      setSelectedContact(null)
+      setIsChatOpen(false)
     }
   }
 
@@ -402,6 +711,26 @@ export default function ChatPage() {
     }
   }
 
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      setAuthError('Hisobdan chiqishda xatolik: ' + error.message)
+      return
+    }
+
+    localStorage.removeItem('linksy_current_user')
+    currentUserRef.current = ''
+    selectedContactRef.current = null
+    relationshipStartedAtRef.current = null
+    setCurrentUser('')
+    setSelectedContact(null)
+    setContacts([])
+    setMessages([])
+    setNewMessage('')
+    setIsChatOpen(false)
+    setIsAuthenticated(false)
+  }
+
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setAuthError('')
@@ -412,61 +741,73 @@ export default function ChatPage() {
     }
 
     const cleanUsername = inputUsername.trim().replace(/^@/, '').toLowerCase()
-
-    const { data: existingUsers } = await supabase
-      .from('messages')
-      .select('content')
-      .ilike('content', `USER_REG|${cleanUsername}|%`)
-
-    if (authMode === 'register') {
-      if (existingUsers && existingUsers.length > 0) {
-        setAuthError('Bu ID (Username) allaqachon band qilingan! Boshqa ID kiriting.')
-        return
-      }
-
-      const regPayload = `USER_REG|${cleanUsername}|${inputPassword}`
-      await supabase.from('messages').insert([
-        { content: regPayload, sender_id: cleanUsername, receiver_id: 'system' }
-      ])
-
-      setCurrentUser(cleanUsername)
-      setProfileName(cleanUsername)
-      setProfileId(`@${cleanUsername}`)
-      localStorage.setItem('linksy_current_user', cleanUsername)
-      setIsAuthenticated(true)
-      fetchMessages()
-      fetchContacts(cleanUsername)
-    } else {
-      if (!existingUsers || existingUsers.length === 0) {
-        setAuthError('Bunday ID topilmadi! Avval ro\'yxatdan o\'ting.')
-        return
-      }
-
-      const userRecord = existingUsers[0].content.split('|')
-      if (userRecord[2] !== inputPassword) {
-        setAuthError('Parol noto\'g\'ri!')
-        return
-      }
-
-      setCurrentUser(cleanUsername)
-      setProfileName(cleanUsername)
-      setProfileId(`@${cleanUsername}`)
-      localStorage.setItem('linksy_current_user', cleanUsername)
-      setIsAuthenticated(true)
-      fetchMessages()
-      fetchContacts(cleanUsername)
+    if (!/^[a-z0-9._-]{3,30}$/.test(cleanUsername) || cleanUsername === 'system' || cleanUsername === 'all') {
+      setAuthError('ID 3–30 belgidan iborat bo‘lsin; lotin harflari, raqam, nuqta, _ yoki - ishlating.')
+      return
     }
-  }
-
-  const sendRawMessage = async (text: string) => {
-    if (messagePermission === 'nobody') {
-      alert('Sizning maxfiylik sozlamangiz bo\'yicha xabar yuborish taqiqlangan!')
+    if (authMode === 'register' && inputPassword.length < 8) {
+      setAuthError('Yangi parol kamida 8 ta belgidan iborat bo‘lishi kerak.')
       return
     }
 
-    if (!text.trim()) return
+    try {
+      const { data, error } = await supabase.functions.invoke<UsernameAuthResponse>('username-auth', {
+        body: {
+          action: authMode,
+          username: cleanUsername,
+          password: inputPassword,
+        },
+      })
+      if (error) throw error
+      if (!data?.username || !data.session?.access_token || !data.session.refresh_token) {
+        throw new Error('Serverdan yaroqli autentifikatsiya javobi kelmadi.')
+      }
 
-    const receiverId = selectedContact ? selectedContact.username : 'all'
+      const { error: sessionError } = await supabase.auth.setSession(data.session)
+      if (sessionError) throw sessionError
+
+      currentUserRef.current = data.username
+      setCurrentUser(data.username)
+      setProfileName(data.username)
+      setInputPassword('')
+      setIsAuthenticated(true)
+      void fetchMessages(data.username)
+      void fetchContacts(data.username)
+    } catch (error) {
+      console.error('Hisobga kirishda xatolik:', error)
+      const errorCode = await getFunctionErrorCode(error)
+      const messages: Record<string, string> = {
+        invalid_credentials: 'ID yoki parol noto‘g‘ri.',
+        username_taken: 'Bu ID allaqachon band.',
+        legacy_account_use_login: 'Bu eski hisob. Kirish rejimida eski ID/parolingizni kiriting — hisob xavfsiz ko‘chiriladi.',
+        password_too_short: 'Yangi parol kamida 8 ta belgidan iborat bo‘lishi kerak.',
+        too_many_attempts: 'Urinishlar limiti tugadi. Biroz kutib qayta urinib ko‘ring.',
+        server_not_configured: 'Supabase auth server sozlanmagan. Administrator bilan bog‘laning.',
+      }
+      setAuthError(
+        (errorCode && messages[errorCode]) ||
+          (authMode === 'login'
+            ? 'Hisobga kirib bo‘lmadi. ID/parol yoki Supabase ulanishini tekshiring.'
+            : 'Ro‘yxatdan o‘tib bo‘lmadi. Supabase auth xizmatini tekshiring.')
+      )
+    }
+  }
+
+  const sendRawMessage = async (text: string): Promise<boolean> => {
+    const isSavedRecipient =
+      selectedContact?.username.toLowerCase() !== 'all' &&
+      contacts.some((contact) => contact.username.toLowerCase() === selectedContact?.username.toLowerCase())
+    if (
+      messagePermission === 'nobody' ||
+      (messagePermission === 'contacts' && !isSavedRecipient)
+    ) {
+      alert('Sizning maxfiylik sozlamangiz bo\'yicha xabar yuborish taqiqlangan!')
+      return false
+    }
+
+    if (!text.trim()) return false
+
+    const receiverId = selectedContact ? selectedContact.username.toLowerCase() : 'all'
 
     const { data, error } = await supabase.from('messages').insert([
       {
@@ -478,30 +819,49 @@ export default function ChatPage() {
 
     if (error) {
       console.error('Xabar yuborishda xatolik:', error.message)
-      return
+      setMessageSyncError('Xabar yuborilmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.')
+      return false
     }
 
+    setMessageSyncError('')
     if (data && data.length > 0 && !text.startsWith('PROFILE_AVATAR|') && !text.startsWith('PROFILE_BIO|') && !text.startsWith('USER_REG|')) {
       setMessages((prev) => {
         if (prev.some((m) => m.id === data[0].id)) return prev
         return [...prev, data[0]]
       })
+      if (selectedContact) {
+        setDrafts((prev) => ({ ...prev, [selectedContact.username.toLowerCase()]: '' }))
+      }
     }
     setRelationshipStarted(true)
+    return true
   }
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim()) return
     const text = newMessage
-    setNewMessage('')
     setShowEmojiPicker(false)
     setShowStickerPicker(false)
-    await sendRawMessage(text)
+    const sent = await sendRawMessage(text)
+    if (sent) setNewMessage('')
   }
 
   const addEmojiToInput = (emoji: string) => {
-    setNewMessage((prev) => prev + emoji)
+    setNewMessage((prev) => {
+      const updated = prev + emoji
+      if (selectedContact) {
+        setDrafts((d) => ({ ...d, [selectedContact.username.toLowerCase()]: updated }))
+      }
+      return updated
+    })
+  }
+
+  const handleInputChange = (val: string) => {
+    setNewMessage(val)
+    if (selectedContact) {
+      setDrafts((d) => ({ ...d, [selectedContact.username.toLowerCase()]: val }))
+    }
   }
 
   const sendSticker = async (stickerContent: string) => {
@@ -510,7 +870,13 @@ export default function ChatPage() {
   }
 
   const startCall = async (type: 'audio' | 'video') => {
-    if (callPermission === 'nobody') {
+    const isSavedRecipient =
+      selectedContact?.username.toLowerCase() !== 'all' &&
+      contacts.some((contact) => contact.username.toLowerCase() === selectedContact?.username.toLowerCase())
+    if (
+      callPermission === 'nobody' ||
+      (callPermission === 'contacts' && !isSavedRecipient)
+    ) {
       alert('Sizning maxfiylik sozlamangiz bo\'yicha qo\'ng\'iroq qilish taqiqlangan!')
       return
     }
@@ -526,7 +892,7 @@ export default function ChatPage() {
       if (type === 'video' && localVideoRef.current) {
         localVideoRef.current.srcObject = stream
       }
-    } catch (err) {
+    } catch {
       alert('Kamera yoki mikrofonni yoqib bo\'lmadi!')
       setActiveCall(null)
     }
@@ -584,7 +950,7 @@ export default function ChatPage() {
 
       mediaRecorder.start()
       setIsRecording(true)
-    } catch (err) {
+    } catch {
       alert('Mikrofondan foydalanishga ruxsat berilmadi!')
     }
   }
@@ -603,21 +969,30 @@ export default function ChatPage() {
 
   const sendGift = async (emoji: string, name: string) => {
     const is3D = name === '3D Olmos'
+    const sent = await sendRawMessage(`GIFT_ANIMATION|${emoji}|${name}`)
+    if (!sent) return
     triggerBigoAnimation(emoji, name, is3D)
-    await sendRawMessage(`GIFT_ANIMATION|${emoji}|${name}`)
     setActiveTab('chat')
+    setIsChatOpen(true)
   }
 
   const sendLoveLetter = async () => {
     if (!letterText.trim()) return
-    await sendRawMessage(`LETTER_CONTENT|${letterText}`)
+    const sent = await sendRawMessage(`LETTER_CONTENT|${letterText}`)
+    if (!sent) return
     setLetterText('')
     setActiveTab('chat')
+    setIsChatOpen(true)
   }
 
   const handleMemoryPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
+    if (file && !file.type.startsWith('image/')) {
+      setMessageSyncError('Faqat rasm faylini yuklash mumkin.')
+    } else if (file && file.size > 5 * 1024 * 1024) {
+      setMessageSyncError('Rasm 5 MB dan kichik bo‘lishi kerak.')
+    } else if (file) {
+      setMessageSyncError('')
       const reader = new FileReader()
       reader.onloadend = () => {
         if (typeof reader.result === 'string') {
@@ -630,12 +1005,21 @@ export default function ChatPage() {
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
+    if (file && !file.type.startsWith('image/')) {
+      setMessageSyncError('Faqat rasm faylini yuklash mumkin.')
+    } else if (file && file.size > 5 * 1024 * 1024) {
+      setMessageSyncError('Rasm 5 MB dan kichik bo‘lishi kerak.')
+    } else if (file) {
+      setMessageSyncError('')
       const reader = new FileReader()
       reader.onloadend = async () => {
         if (typeof reader.result === 'string') {
           const base64Avatar = reader.result
           setProfileAvatar(base64Avatar)
+          setUserProfiles((prev) => ({
+            ...prev,
+            [currentUser]: { ...prev[currentUser], avatar: base64Avatar },
+          }))
           await sendRawMessage(`PROFILE_AVATAR|${base64Avatar}`)
         }
       }
@@ -645,29 +1029,231 @@ export default function ChatPage() {
 
   const handleBioChange = async (newBio: string) => {
     setProfileBio(newBio)
+    setUserProfiles((prev) => ({
+      ...prev,
+      [currentUser]: { ...prev[currentUser], bio: newBio },
+    }))
     await sendRawMessage(`PROFILE_BIO|${newBio}`)
   }
 
   const clearChat = async () => {
-    await supabase.from('messages').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-    setMessages([])
-    setRelationshipStarted(false)
-    setSecondsTogether(0)
+    if (!selectedContact) return
+
+    let query = supabase.from('messages').delete()
+    if (selectedContact.username.toLowerCase() === 'all') {
+      query = query.eq('receiver_id', 'all')
+    } else {
+      const target = quotePostgrestValue(selectedContact.username.toLowerCase())
+      const user = quotePostgrestValue(currentUser)
+      query = query.or(
+        `and(sender_id.eq.${user},receiver_id.eq.${target}),and(sender_id.eq.${target},receiver_id.eq.${user})`
+      )
+    }
+
+    const { error } = await query
+    if (error) {
+      console.error('Suhbatni tozalashda xatolik:', error.message)
+      setMessageSyncError('Suhbatni tozalab bo‘lmadi. Qayta urinib ko‘ring.')
+      return
+    }
+
+    const targetId = selectedContact.username.toLowerCase()
+    const remainingMessages = messages.filter((message) => {
+      const sender = (message.sender_id || '').toLowerCase()
+      const receiver = (message.receiver_id || '').toLowerCase()
+      if (targetId === 'all') return sender !== 'all' && receiver !== 'all'
+      return !(
+        (sender === currentUser && receiver === targetId) ||
+        (sender === targetId && receiver === currentUser)
+      )
+    })
+    setMessages(remainingMessages)
+    setRelationshipStarted(remainingMessages.length > 0)
+    if (remainingMessages.length === 0) {
+      relationshipStartedAtRef.current = null
+      secondsTogetherRef.current = 0
+      setSecondsTogether(0)
+    }
     setIsDrawerOpen(false)
   }
 
-  const displayedMessages = selectedContact
-    ? messages.filter(
-        (m) =>
-          (m.sender_id === currentUser && (m.receiver_id === selectedContact.username || m.receiver_id === 'all')) ||
-          (m.sender_id === selectedContact.username && (m.receiver_id === currentUser || m.receiver_id === 'all'))
-      )
-    : messages
+  const allChatPartners: ContactItem[] = (() => {
+    const map = new Map<string, ContactItem>()
 
-  const days = Math.floor(secondsTogether / (3600 * 24))
-  const hours = Math.floor((secondsTogether % (3600 * 24)) / 3600)
+    contacts.forEach((c) => {
+      const key = c.username.toLowerCase()
+      if (key && key !== currentUser) {
+        map.set(key, {
+          ...c,
+          avatar: getUserAvatar(key, c.avatar),
+          isMuted: mutedChats[key] || false,
+          isPinned: pinnedChats[key] || false,
+        })
+      }
+    })
+
+    messages.forEach((m) => {
+      const sId = (m.sender_id || '').toLowerCase()
+      const rId = (m.receiver_id || '').toLowerCase()
+
+      if (sId && sId !== currentUser && sId !== 'system' && sId !== 'all') {
+        if (!map.has(sId)) {
+          map.set(sId, {
+            id: sId,
+            username: sId,
+            name: sId,
+            avatar: getUserAvatar(sId),
+            status: 'Yangi xabar ✨',
+            isMuted: mutedChats[sId] || false,
+            isPinned: pinnedChats[sId] || false,
+          })
+        }
+      }
+
+      if (rId && rId !== currentUser && rId !== 'system' && rId !== 'all') {
+        if (!map.has(rId)) {
+          map.set(rId, {
+            id: rId,
+            username: rId,
+            name: rId,
+            avatar: getUserAvatar(rId),
+            status: 'Online ✨',
+            isMuted: mutedChats[rId] || false,
+            isPinned: pinnedChats[rId] || false,
+          })
+        }
+      }
+    })
+
+    registeredUsers.forEach((u) => {
+      const cleanU = u.toLowerCase()
+      if (cleanU && cleanU !== currentUser && cleanU !== 'system' && !map.has(cleanU)) {
+        map.set(cleanU, {
+          id: cleanU,
+          username: cleanU,
+          name: cleanU,
+          avatar: getUserAvatar(cleanU),
+          status: 'Linksy foydalanuvchisi ✨',
+          isMuted: mutedChats[cleanU] || false,
+          isPinned: pinnedChats[cleanU] || false,
+        })
+      }
+    })
+
+    if (!map.has('all')) {
+      map.set('all', {
+        id: 'all',
+        username: 'all',
+        name: '💖 Umumiy Sevgi Suhbatxonasi',
+        avatar: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=500&auto=format&fit=crop&q=60',
+        status: 'Barcha xabarlar ✨',
+      })
+    }
+
+    const partners = Array.from(map.values()).filter(
+      (item) =>
+        item.name.toLowerCase().includes(chatSearchQuery.toLowerCase()) ||
+        item.username.toLowerCase().includes(chatSearchQuery.toLowerCase())
+    )
+
+    return partners.sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1
+      if (!a.isPinned && b.isPinned) return 1
+
+      const lastA = getLastMessageTimestamp(a.username)
+      const lastB = getLastMessageTimestamp(b.username)
+      return lastB - lastA
+    })
+  })()
+
+  const displayedMessages = (() => {
+    if (!selectedContact) return []
+
+    const target = selectedContact.username.toLowerCase()
+
+    if (target === 'all') {
+      return messages.filter((m) => {
+        const s = (m.sender_id || '').toLowerCase()
+        const r = (m.receiver_id || '').toLowerCase()
+        return s === 'all' || r === 'all'
+      })
+    }
+
+    return messages.filter((m) => {
+      const s = (m.sender_id || '').toLowerCase()
+      const r = (m.receiver_id || '').toLowerCase()
+      return (
+        (s === currentUser && r === target) ||
+        (s === target && r === currentUser)
+      )
+    })
+  })()
+
+  const days = Math.floor(secondsTogether / 86400)
+  const hours = Math.floor((secondsTogether % 86400) / 3600)
   const minutes = Math.floor((secondsTogether % 3600) / 60)
   const seconds = secondsTogether % 60
+
+  function getLastMessageTimestamp(partnerUsername: string) {
+    const cleanPartner = partnerUsername.toLowerCase()
+    const userMsgs =
+      cleanPartner === 'all'
+        ? messages.filter((m) =>
+            (m.sender_id || '').toLowerCase() === 'all' ||
+            (m.receiver_id || '').toLowerCase() === 'all'
+          )
+        : messages.filter((m) => {
+            const s = (m.sender_id || '').toLowerCase()
+            const r = (m.receiver_id || '').toLowerCase()
+            return (
+              (s === currentUser && r === cleanPartner) ||
+              (s === cleanPartner && r === currentUser)
+            )
+          })
+    if (userMsgs.length === 0) return 0
+    return new Date(userMsgs[userMsgs.length - 1].created_at).getTime()
+  }
+
+  function getLastMessageWithUser(partnerUsername: string) {
+    const cleanPartner = partnerUsername.toLowerCase()
+    const userMsgs =
+      cleanPartner === 'all'
+        ? messages.filter((m) =>
+            (m.sender_id || '').toLowerCase() === 'all' ||
+            (m.receiver_id || '').toLowerCase() === 'all'
+          )
+        : messages.filter((m) => {
+            const s = (m.sender_id || '').toLowerCase()
+            const r = (m.receiver_id || '').toLowerCase()
+            return (
+              (s === currentUser && r === cleanPartner) ||
+              (s === cleanPartner && r === currentUser)
+            )
+          })
+
+    const draftText = drafts[cleanPartner]
+    if (draftText) {
+      return { preview: `Qoralama: ${draftText}`, time: 'Hozir', isMine: false, hasDraft: true }
+    }
+
+    if (userMsgs.length === 0) {
+      return { preview: 'Suhbatni boshlash uchun bosing 💖', time: '', isMine: false, hasDraft: false }
+    }
+
+    const last = userMsgs[userMsgs.length - 1]
+    let preview = last.content
+    if (preview.startsWith('GIFT_ANIMATION|')) {
+      const parts = preview.split('|')
+      preview = `${parts[1] || '🎁'} Sovg'a: ${parts[2] || ''}`
+    } else if (preview.startsWith('VOICE_NOTE|')) {
+      preview = '🎤 Ovozli xabar'
+    } else if (preview.startsWith('LETTER_CONTENT|')) {
+      preview = '💌 Maxfiy sevgi maktubi'
+    }
+
+    const time = new Date(last.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return { preview, time, isMine: last.sender_id.toLowerCase() === currentUser, hasDraft: false }
+  }
 
   const getThemeColors = (isMine: boolean) => {
     if (!isMine) {
@@ -697,93 +1283,32 @@ export default function ChatPage() {
   if (!isAuthenticated) {
     return (
       <div className="app-viewport" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100vw', backgroundColor: '#050508', color: '#fff', fontFamily: 'sans-serif', padding: '16px', boxSizing: 'border-box', overflowY: 'auto' }}>
-        <style jsx global>{`
-          html, body {
-            margin: 0;
-            padding: 0;
-            background-color: #050508;
-            overscroll-behavior: none;
-            -webkit-tap-highlight-color: transparent;
-          }
-          .app-viewport {
-            height: 100vh;
-            height: 100dvh;
-          }
-          @keyframes pulseGlow {
-            0% { box-shadow: 0 0 15px rgba(236, 72, 153, 0.5); }
-            50% { box-shadow: 0 0 30px rgba(244, 114, 182, 0.8); }
-            100% { box-shadow: 0 0 15px rgba(236, 72, 153, 0.5); }
-          }
-          .auth-box { animation: pulseGlow 4s infinite ease-in-out; }
+        <style>{`
+          html, body { margin: 0; padding: 0; background-color: #050508; overscroll-behavior: none; }
+          .app-viewport { height: 100vh; height: 100dvh; }
         `}</style>
-
-        <div className="auth-box" style={{ width: '100%', maxWidth: '400px', padding: 'clamp(20px, 5vw, 30px)', borderRadius: '24px', backgroundColor: '#0c0a14', border: '1px solid rgba(168, 85, 247, 0.4)', boxSizing: 'border-box', textAlign: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: 'clamp(22px, 6vw, 26px)', fontWeight: 900, color: '#f472b6', marginBottom: '8px' }}>
-            Linksy <Crown size={22} color="#facc15" />
-          </div>
+        <div style={{ width: '100%', maxWidth: '400px', padding: '24px', borderRadius: '24px', backgroundColor: '#0c0a14', border: '1px solid rgba(168, 85, 247, 0.4)', textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', fontWeight: 900, color: '#f472b6', marginBottom: '8px' }}>Linksy 👑</div>
           <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '20px' }}>Sevishganlar uchun xavfsiz va shaxsiy makon 💖</div>
 
-          <button
-            onClick={handleGoogleLogin}
-            style={{ width: '100%', padding: '12px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: '#ffffff', color: '#000000', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '16px', boxShadow: '0 4px 12px rgba(255,255,255,0.1)' }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.15v3.15C3.15 21.32 7.21 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.15C.42 8.05 0 9.7 0 12s.42 3.95 1.15 5.42l4.13-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.21 0 3.15 2.68 1.15 6.58l4.13 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/></svg>
-            Google orqali kirish
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '14px 0', color: '#6b7280', fontSize: '12px' }}>
-            <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }}></div>
-            yoki ID bilan
-            <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }}></div>
-          </div>
-
-          <div style={{ display: 'flex', backgroundColor: '#18181b', borderRadius: '12px', padding: '4px', marginBottom: '18px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
-            <button
-              onClick={() => { setAuthMode('register'); setAuthError(''); }}
-              style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', backgroundColor: authMode === 'register' ? 'rgba(147,51,234,0.4)' : 'transparent', color: authMode === 'register' ? '#fff' : '#9ca3af', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
-            >
-              Ro'yxatdan o'tish
-            </button>
-            <button
-              onClick={() => { setAuthMode('login'); setAuthError(''); }}
-              style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', backgroundColor: authMode === 'login' ? 'rgba(147,51,234,0.4)' : 'transparent', color: authMode === 'login' ? '#fff' : '#9ca3af', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
-            >
-              Kirish
-            </button>
-          </div>
+          <button onClick={handleGoogleLogin} style={{ width: '100%', padding: '12px', borderRadius: '14px', backgroundColor: '#ffffff', color: '#000000', fontWeight: 700, fontSize: '14px', cursor: 'pointer', border: 'none', marginBottom: '16px' }}>Google orqali kirish</button>
 
           <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px', textAlign: 'left' }}>
-            <div>
-              <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Unikal ID (Username):</label>
-              <input
-                type="text"
-                value={inputUsername}
-                onChange={(e) => setInputUsername(e.target.value)}
-                placeholder="Masalan: shahzoda_2026"
-                style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', backgroundColor: '#18181b', border: '1px solid rgba(168,85,247,0.4)', color: '#fff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Maxfiy Parol:</label>
-              <input
-                type="password"
-                value={inputPassword}
-                onChange={(e) => setInputPassword(e.target.value)}
-                placeholder="••••••••"
-                style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', backgroundColor: '#18181b', border: '1px solid rgba(168,85,247,0.4)', color: '#fff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
-              />
-            </div>
-
-            {authError && <div style={{ fontSize: '12px', color: '#ef4444', textAlign: 'center', fontWeight: 600 }}>{authError}</div>}
-
-            <button
-              type="submit"
-              style={{ width: '100%', padding: '13px', borderRadius: '14px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 800, fontSize: '14px', cursor: 'pointer', marginTop: '4px', boxShadow: '0 0 20px rgba(236,72,153,0.4)' }}
-            >
-              {authMode === 'register' ? 'Hisob yaratish ✨' : 'Kirish 🚀'}
-            </button>
+            <input type="text" value={inputUsername} onChange={(e) => setInputUsername(e.target.value)} placeholder="Unikal ID (masalan: shahzoda)" style={{ width: '100%', padding: '12px', borderRadius: '12px', backgroundColor: '#18181b', border: '1px solid rgba(168,85,247,0.4)', color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
+            <input type="password" value={inputPassword} onChange={(e) => setInputPassword(e.target.value)} placeholder="Parol" style={{ width: '100%', padding: '12px', borderRadius: '12px', backgroundColor: '#18181b', border: '1px solid rgba(168,85,247,0.4)', color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
+            {authError && <div style={{ fontSize: '12px', color: '#ef4444' }}>{authError}</div>}
+            <button type="submit" style={{ width: '100%', padding: '13px', borderRadius: '14px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>{authMode === 'register' ? 'Ro‘yxatdan o‘tish' : 'Kirish'}</button>
           </form>
+          <button
+            type="button"
+            onClick={() => {
+              setAuthMode((mode) => mode === 'register' ? 'login' : 'register')
+              setAuthError('')
+            }}
+            style={{ marginTop: '14px', padding: '8px', border: 'none', background: 'transparent', color: '#d8b4fe', cursor: 'pointer', fontSize: '13px' }}
+          >
+            {authMode === 'register' ? 'Hisobingiz bormi? Kirish' : 'Yangi hisob ochish'}
+          </button>
         </div>
       </div>
     )
@@ -802,227 +1327,119 @@ export default function ChatPage() {
         fontFamily: 'sans-serif',
         opacity: isAppLoaded ? 1 : 0,
         transform: isAppLoaded ? 'scale(1)' : 'scale(0.99)',
-        transition: 'opacity 0.4s ease-out, transform 0.4s ease-out',
+        transition: 'opacity 0.4s ease-out',
         boxSizing: 'border-box',
         position: 'relative',
       }}
     >
-      <style jsx global>{`
-        html, body {
-          margin: 0;
-          padding: 0;
-          background-color: #050508;
-          overscroll-behavior: none;
-          -webkit-tap-highlight-color: transparent;
-        }
-        .app-viewport {
-          height: 100vh;
-          height: 100dvh;
-        }
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
+      <style>{`
+        html, body { margin: 0; padding: 0; background-color: #050508; overscroll-behavior: none; }
+        .app-viewport { height: 100vh; height: 100dvh; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         @keyframes pulseGlow {
-          0% { box-shadow: 0 0 10px rgba(236, 72, 153, 0.6), inset 0 0 10px rgba(147, 51, 234, 0.6); }
-          50% { box-shadow: 0 0 25px rgba(244, 114, 182, 0.9), inset 0 0 18px rgba(236, 72, 153, 0.9); }
-          100% { box-shadow: 0 0 10px rgba(236, 72, 153, 0.6), inset 0 0 10px rgba(147, 51, 234, 0.6); }
-        }
-        @keyframes gradientRotate {
-          0% { filter: hue-rotate(0deg); }
-          50% { filter: hue-rotate(45deg); }
-          100% { filter: hue-rotate(0deg); }
+          0% { box-shadow: 0 0 10px rgba(236, 72, 153, 0.6); }
+          50% { box-shadow: 0 0 25px rgba(244, 114, 182, 0.9); }
+          100% { box-shadow: 0 0 10px rgba(236, 72, 153, 0.6); }
         }
         .animated-avatar-ring {
-          animation: pulseGlow 3s infinite ease-in-out, gradientRotate 5s infinite linear;
-          border: 2.5px solid transparent;
-          background: linear-gradient(135deg, #ec4899, #9333ea, #facc15) border-box;
+          animation: pulseGlow 3s infinite ease-in-out;
+          border: 2px solid #ec4899;
         }
-        @keyframes bubbleGlow {
-          0% { filter: drop-shadow(0 0 4px rgba(168, 85, 247, 0.3)); }
-          50% { filter: drop-shadow(0 0 10px rgba(236, 72, 153, 0.6)); }
-          100% { filter: drop-shadow(0 0 4px rgba(168, 85, 247, 0.3)); }
-        }
-        .animated-bubble {
-          animation: bubbleGlow 4s infinite ease-in-out;
-        }
-
-        /* TELEFONLAR UCHUN MAXSUS MOSLASHUVCHAN QOIDALAR */
-        @media (max-width: 640px) {
-          .royal-badge {
-            display: none !important;
-          }
-          .mobile-header {
-            padding: 10px 12px !important;
-            gap: 8px !important;
-          }
-          .mobile-scroll-area {
-            padding: 12px !important;
-          }
-          .mobile-bubble {
-            max-width: 85% !important;
-            padding: 10px 14px !important;
-          }
-          .mobile-input-form {
-            padding: 8px 10px !important;
-            gap: 6px !important;
-          }
-          .mobile-send-btn {
-            padding: 11px 14px !important;
-          }
-          .mobile-nav {
-            padding: 8px 6px calc(8px + env(safe-area-inset-bottom)) 6px !important;
-          }
-          .contact-card-row {
-            flex-direction: column !important;
-            align-items: stretch !important;
-          }
-          .contact-card-actions {
-            width: 100% !important;
-            justify-content: flex-end !important;
-          }
-          .contact-card-actions button:first-child {
-            flex: 1 !important;
-            justify-content: center !important;
-          }
+        .chat-list-row:hover {
+          background-color: rgba(147, 51, 234, 0.18) !important;
         }
       `}</style>
 
+      {/* RASMNI KATTA QILIB KO'RISH MODALI */}
       {isAvatarModalOpen && (
-        <div
-          onClick={() => setIsAvatarModalOpen(false)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 999999,
-            backgroundColor: 'rgba(0, 0, 0, 0.9)',
-            backdropFilter: 'blur(16px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '20px',
-            cursor: 'zoom-out',
-          }}
-        >
-          <div style={{ position: 'relative', maxWidth: '92vw', maxHeight: '85vh', borderRadius: '24px', overflow: 'hidden', border: '3px solid #ec4899', boxShadow: '0 0 50px rgba(236,72,153,0.6)' }}>
-            <img src={selectedContact ? selectedContact.avatar : profileAvatar} alt="Zoomed Avatar" style={{ width: '100%', height: '100%', objectFit: 'contain', maxHeight: '80vh' }} />
+        <div onClick={() => setIsAvatarModalOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 999999, backgroundColor: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', cursor: 'zoom-out' }}>
+          <div style={{ position: 'relative', maxWidth: '92vw', maxHeight: '85vh', borderRadius: '24px', overflow: 'hidden', border: '3px solid #ec4899' }}>
+            <Image src={zoomedAvatarUrl || profileAvatar} alt="Katta profil rasmi" width={800} height={800} unoptimized style={{ width: '100%', height: '100%', objectFit: 'contain', maxHeight: '80vh' }} />
           </div>
         </div>
       )}
 
-      {activeCall && (
-        <div
-          className="app-viewport"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 99999,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            backgroundColor: '#05050bf8',
-            backdropFilter: 'blur(24px)',
-            padding: 'clamp(20px, 5vh, 40px) 16px calc(24px + env(safe-area-inset-bottom)) 16px',
-            boxSizing: 'border-box',
-            width: '100vw',
-          }}
-        >
-          <div style={{ textAlign: 'center', marginTop: '6px' }}>
-            <div className="animated-avatar-ring" style={{ width: 'clamp(80px, 22vw, 105px)', height: 'clamp(80px, 22vw, 105px)', borderRadius: '50%', overflow: 'hidden', margin: '0 auto 12px auto' }}>
-              <img src={selectedContact ? selectedContact.avatar : profileAvatar} alt="Caller" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            </div>
-            <div style={{ fontSize: 'clamp(18px, 5vw, 22px)', fontWeight: 800, color: '#fff' }}>
-              {selectedContact ? selectedContact.name : profileName}
-            </div>
-            <div style={{ fontSize: '13px', color: '#22d3ee', marginTop: '6px' }}>
-              {activeCall === 'video' ? '📹 To\'liq ekranli video qo\'ng\'iroq...' : '📞 Audio qo\'ng\'iroq davom etmoqda...'}
-            </div>
-          </div>
+      {/* SUHBATDOSH PROFILINI KO'RISH VA ID NUSXALASH MODALI */}
+      {viewingUserProfile && (
+        <div onClick={() => setViewingUserProfile(null)} style={{ position: 'fixed', inset: 0, zIndex: 99998, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '390px', backgroundColor: '#0c0a14', borderRadius: '24px', border: '1px solid rgba(236, 72, 153, 0.6)', padding: '22px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', position: 'relative' }}>
+            <button onClick={() => setViewingUserProfile(null)} style={{ position: 'absolute', top: '14px', right: '14px', background: '#18181b', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button>
 
+            <div onClick={() => { setZoomedAvatarUrl(getUserAvatar(viewingUserProfile.username, viewingUserProfile.avatar)); setIsAvatarModalOpen(true); }} className="animated-avatar-ring" style={{ width: '94px', height: '94px', borderRadius: '50%', overflow: 'hidden', cursor: 'zoom-in', marginBottom: '12px', backgroundColor: '#18181b' }}>
+              <Image src={getUserAvatar(viewingUserProfile.username, viewingUserProfile.avatar)} alt={viewingUserProfile.name} width={188} height={188} unoptimized style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
+
+            <div style={{ fontSize: '18px', fontWeight: 800, color: '#fff', marginBottom: '2px' }}>{viewingUserProfile.name}</div>
+            <div style={{ fontSize: '12px', color: '#34d399', marginBottom: '8px' }}>{viewingUserProfile.status}</div>
+            <div style={{ fontSize: '13px', color: '#d8b4fe', fontStyle: 'italic', marginBottom: '14px' }}>&quot;{getUserBio(viewingUserProfile.username)}&quot;</div>
+
+            <div style={{ width: '100%', padding: '10px 12px', borderRadius: '14px', backgroundColor: '#18181b', border: '1px solid rgba(34, 211, 238, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', boxSizing: 'border-box' }}>
+              <div style={{ textAlign: 'left', minWidth: 0 }}>
+                <div style={{ fontSize: '10px', color: '#9ca3af' }}>Foydalanuvchi ID:</div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#22d3ee' }}>@{viewingUserProfile.username}</div>
+              </div>
+              <button onClick={() => handleCopyUserId(viewingUserProfile.username)} style={{ padding: '8px 12px', borderRadius: '10px', border: 'none', backgroundColor: copiedId ? 'rgba(52, 211, 153, 0.25)' : 'rgba(34, 211, 238, 0.2)', color: copiedId ? '#34d399' : '#22d3ee', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                {copiedId ? <Check size={15} /> : <Copy size={15} />} {copiedId ? 'Nusxalandi!' : 'ID Copy'}
+              </button>
+            </div>
+
+            {viewingUserProfile.username.toLowerCase() !== currentUser && viewingUserProfile.username !== 'all' && (
+              <div style={{ width: '100%', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: '#18181b', padding: '12px', borderRadius: '14px', border: '1px solid rgba(168, 85, 247, 0.35)' }}>
+                  <div style={{ fontSize: '11px', color: '#f472b6', fontWeight: 700, textAlign: 'left' }}>Kontaktga saqlash / Ismni o&apos;zgartirish:</div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input type="text" value={quickSaveName} onChange={(e) => setQuickSaveName(e.target.value)} placeholder="Ism..." style={{ flex: 1, padding: '9px', borderRadius: '10px', backgroundColor: '#09090b', border: '1px solid rgba(168,85,247,0.4)', color: '#fff', fontSize: '13px', outline: 'none' }} />
+                    <button onClick={handleQuickSaveContact} disabled={isSavingContact} style={{ padding: '9px 14px', borderRadius: '10px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>Saqlash</button>
+                  </div>
+                  {quickSaveSuccess && <div style={{ fontSize: '11px', color: '#34d399', fontWeight: 600 }}>{quickSaveSuccess}</div>}
+                </div>
+              </div>
+            )}
+
+            <button onClick={() => { handleSelectContactForChat(viewingUserProfile); setViewingUserProfile(null); }} style={{ width: '100%', padding: '11px', borderRadius: '12px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Suhbatga kirish</button>
+          </div>
+        </div>
+      )}
+
+      {/* AUDIO/VIDEO CALL MODAL */}
+      {activeCall && (
+        <div className="app-viewport" style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#05050bf8', backdropFilter: 'blur(24px)', padding: '30px 16px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: '90px', height: '90px', borderRadius: '50%', overflow: 'hidden', margin: '0 auto 12px auto' }}>
+              <Image src={selectedContact ? getUserAvatar(selectedContact.username, selectedContact.avatar) : profileAvatar} alt="Suhbatdosh" width={180} height={180} unoptimized style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: '#fff' }}>{selectedContact ? selectedContact.name : profileName}</div>
+            <div style={{ fontSize: '13px', color: '#22d3ee', marginTop: '6px' }}>{activeCall === 'video' ? '📹 Video qo\'ng\'iroq...' : '📞 Audio qo\'ng\'iroq...'}</div>
+          </div>
           {activeCall === 'video' && (
-            <div style={{ width: '100%', maxWidth: '900px', flex: 1, maxHeight: '62vh', backgroundColor: '#121019', borderRadius: '20px', overflow: 'hidden', border: '2px solid rgba(168,85,247,0.5)', position: 'relative', margin: '14px 0', boxShadow: '0 0 50px rgba(147,51,234,0.4)' }}>
+            <div style={{ width: '100%', maxWidth: '800px', flex: 1, backgroundColor: '#121019', borderRadius: '20px', overflow: 'hidden', margin: '14px 0' }}>
               <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
             </div>
           )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '6px' }}>
-            <button
-              onClick={toggleMute}
-              style={{ width: '54px', height: '54px', borderRadius: '50%', backgroundColor: isMuted ? '#ef4444' : '#27272a', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}
-            >
-              {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
-            </button>
-
+          <div style={{ display: 'flex', gap: '20px' }}>
+            <button onClick={toggleMute} style={{ width: '54px', height: '54px', borderRadius: '50%', backgroundColor: isMuted ? '#ef4444' : '#27272a', border: 'none', color: '#fff', cursor: 'pointer' }}>{isMuted ? <MicOff size={22} /> : <Mic size={22} />}</button>
             {activeCall === 'video' && (
-              <button
-                onClick={toggleVideo}
-                style={{ width: '54px', height: '54px', borderRadius: '50%', backgroundColor: isVideoOff ? '#ef4444' : '#27272a', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}
-              >
+              <button onClick={toggleVideo} aria-label={isVideoOff ? 'Videoni yoqish' : 'Videoni o‘chirish'} style={{ width: '54px', height: '54px', borderRadius: '50%', backgroundColor: isVideoOff ? '#ef4444' : '#27272a', border: 'none', color: '#fff', cursor: 'pointer' }}>
                 {isVideoOff ? <VideoOff size={22} /> : <Video size={22} />}
               </button>
             )}
-
-            <button
-              onClick={endCall}
-              style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#dc2626', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 0 25px rgba(220,38,38,0.7)' }}
-            >
-              <PhoneOff size={28} />
-            </button>
+            <button onClick={endCall} style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#dc2626', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><PhoneOff size={28} /></button>
           </div>
         </div>
       )}
 
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          width: '100%',
-          maxWidth: '1200px',
-          height: '100%',
-          margin: '0 auto',
-          borderLeft: '1px solid rgba(147, 51, 234, 0.2)',
-          borderRight: '1px solid rgba(147, 51, 234, 0.2)',
-          backgroundColor: '#09090b',
-          position: 'relative',
-          boxSizing: 'border-box',
-        }}
-      >
+      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '1200px', height: '100%', margin: '0 auto', backgroundColor: '#09090b', position: 'relative', boxSizing: 'border-box' }}>
+
+        {/* GIFTS 3D ANIMATION MODAL */}
         {activeAnimationGift && (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              zIndex: 100,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: 'rgba(0, 0, 0, 0.88)',
-              backdropFilter: 'blur(10px)',
-              padding: '20px',
-            }}
-          >
+          <div style={{ position: 'absolute', inset: 0, zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(10px)', padding: '20px' }}>
             {activeAnimationGift.is3D ? (
-              <div style={{ width: '280px', height: '280px', maxWidth: '80vw', maxHeight: '50vh' }}>
-                <Canvas camera={{ position: [0, 0, 5] }}>
-                  <ambientLight intensity={1.5} />
-                  <pointLight position={[10, 10, 10]} intensity={2} />
-                  <SpinningDiamond />
-                  <OrbitControls enableZoom={false} />
-                </Canvas>
-              </div>
+              <div className="gift-diamond" aria-label="Olmos sovg‘asi">💎</div>
             ) : (
-              <div style={{ fontSize: 'clamp(64px, 18vw, 80px)', filter: 'drop-shadow(0 0 35px #ec4899)' }}>
-                {activeAnimationGift.emoji}
-              </div>
+              <div style={{ fontSize: '80px' }}>{activeAnimationGift.emoji}</div>
             )}
-            <div style={{ fontSize: 'clamp(18px, 5vw, 24px)', fontWeight: 800, color: '#f472b6', marginTop: '16px', textAlign: 'center', textTransform: 'uppercase' }}>
-              ✨ {activeAnimationGift.name} ✨
-            </div>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: '#f472b6', marginTop: '16px', textTransform: 'uppercase' }}>✨ {activeAnimationGift.name} ✨</div>
           </div>
         )}
 
@@ -1041,7 +1458,7 @@ export default function ChatPage() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '16px' }}>
                   {[
-                    { id: 'chat', label: 'Suhbat oynasi', icon: <MessageCircle size={18} color="#22d3ee" /> },
+                    { id: 'chat', label: 'Barcha Chatlar Ro\'yxati', icon: <MessageCircle size={18} color="#22d3ee" /> },
                     { id: 'contacts', label: `Kontaktlar (${contacts.length})`, icon: <Users size={18} color="#38bdf8" /> },
                     { id: 'gifts', label: "Sovg'alar do'koni", icon: <Gift size={18} color="#f472b6" /> },
                     { id: 'letters', label: 'Maxfiy Maktublar', icon: <Mail size={18} color="#c084fc" /> },
@@ -1051,7 +1468,11 @@ export default function ChatPage() {
                   ].map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => { setActiveTab(item.id as any); setIsDrawerOpen(false); }}
+                      onClick={() => {
+                        setActiveTab(item.id as AppTab)
+                        if (item.id === 'chat') setIsChatOpen(false)
+                        setIsDrawerOpen(false)
+                      }}
                       style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 13px', borderRadius: '12px', border: activeTab === item.id ? '1px solid rgba(168,85,247,0.5)' : '1px solid transparent', backgroundColor: activeTab === item.id ? 'rgba(147,51,234,0.25)' : 'transparent', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
                     >
                       {item.icon} {item.label}
@@ -1062,7 +1483,7 @@ export default function ChatPage() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
                 <button onClick={clearChat} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 14px', borderRadius: '12px', backgroundColor: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.35)', color: '#fbbf24', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}><Trash2 size={16} /> Xabarlarni tozalash</button>
-                <button onClick={() => { localStorage.removeItem('linksy_current_user'); supabase.auth.signOut(); setIsAuthenticated(false); }} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 14px', borderRadius: '12px', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#f87171', fontSize: '13px', fontWeight: 600, cursor: 'pointer', width: '100%', textAlign: 'left' }}><LogOut size={16} /> Hisobdan chiqish</button>
+                <button onClick={handleSignOut} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 14px', borderRadius: '12px', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#f87171', fontSize: '13px', fontWeight: 600, cursor: 'pointer', width: '100%', textAlign: 'left' }}><LogOut size={16} /> Hisobdan chiqish</button>
               </div>
             </div>
           </div>
@@ -1070,109 +1491,311 @@ export default function ChatPage() {
 
         {/* HEADER */}
         <header className="mobile-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: '1px solid rgba(147, 51, 234, 0.3)', backgroundColor: '#0c0a14', flexShrink: 0, gap: '10px', boxSizing: 'border-box' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
-            <button onClick={() => setIsDrawerOpen(true)} style={{ padding: '8px', borderRadius: '11px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#d8b4fe', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Menu size={19} /></button>
-
-            <div
-              onClick={() => setActiveTab('profile')}
-              className="animated-avatar-ring"
-              style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#000', flexShrink: 0, cursor: 'pointer' }}
-              title="Profilga o'tish"
-            >
-              <img src={selectedContact ? selectedContact.avatar : profileAvatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            </div>
-
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                <span style={{ fontWeight: 700, fontSize: '14px', color: '#f472b6', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {selectedContact ? selectedContact.name : profileName}
-                </span>
-                <CheckCircle2 size={15} style={{ fill: 'url(#gradient-check)', color: '#fff', flexShrink: 0 }} />
-                <svg width="0" height="0">
-                  <linearGradient id="gradient-check" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop stopColor="#ec4899" offset="0%" />
-                    <stop stopColor="#9333ea" offset="100%" />
-                  </linearGradient>
-                </svg>
-                <span className="royal-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'linear-gradient(135deg, rgba(236,72,153,0.25), rgba(147,51,234,0.35))', border: '1px solid rgba(244,114,182,0.6)', color: '#f472b6', padding: '2px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, flexShrink: 0, boxShadow: '0 0 10px rgba(236,72,153,0.4)' }}>
-                  <Crown size={11} color="#facc15" /> ROYAL LOVE ✨
-                </span>
+          {activeTab === 'chat' && !isChatOpen ? (
+            /* CHATLAR RO'YXATI HEADERI */
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button onClick={() => setIsDrawerOpen(true)} style={{ padding: '8px', borderRadius: '11px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#d8b4fe', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Menu size={19} />
+                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontWeight: 900, fontSize: '20px', color: '#f472b6', letterSpacing: '0.5px' }}>Linksy Chatlar</span>
+                  <Crown size={18} color="#facc15" />
+                </div>
               </div>
-              <div style={{ fontSize: '11px', color: '#22d3ee', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {selectedContact
-                  ? `@${selectedContact.username} • Siz: @${currentUser}`
-                  : `ID: @${currentUser} (online ✨)`}
-              </div>
-            </div>
-          </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-            <button onClick={() => setActiveTab('contacts')} style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.4)', color: '#38bdf8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Kontaktlar">
-              <UserPlus size={17} />
-            </button>
-            <button onClick={() => startCall('audio')} style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(34, 211, 238, 0.15)', border: '1px solid rgba(34, 211, 238, 0.4)', color: '#22d3ee', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Audio qo'ng'iroq">
-              <PhoneCall size={17} />
-            </button>
-            <button onClick={() => startCall('video')} style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(236, 72, 153, 0.15)', border: '1px solid rgba(236, 72, 153, 0.4)', color: '#f472b6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Video qo'ng'iroq">
-              <Video size={17} />
-            </button>
-          </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div
+                  onClick={() => openUserProfileModal(currentUser)}
+                  style={{ fontSize: '12px', color: '#22d3ee', backgroundColor: 'rgba(34,211,238,0.12)', border: '1px solid rgba(34,211,238,0.35)', padding: '6px 10px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700 }}
+                  title="Mening profilim va ID manzilim"
+                >
+                  @{currentUser}
+                </div>
+                <button
+                  onClick={() => setActiveTab('contacts')}
+                  style={{ padding: '8px 12px', borderRadius: '10px', background: 'linear-gradient(to right, #ec4899, #9333ea)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 700 }}
+                >
+                  <UserPlus size={15} /> Kontakt
+                </button>
+              </div>
+            </>
+          ) : (
+            /* SUHBAT XONASI HEADERI */
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                {activeTab === 'chat' && isChatOpen ? (
+                  <button
+                    onClick={() => setIsChatOpen(false)}
+                    style={{ padding: '8px 12px', borderRadius: '11px', backgroundColor: 'rgba(34, 211, 238, 0.15)', border: '1px solid rgba(34, 211, 238, 0.45)', color: '#22d3ee', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 800, flexShrink: 0 }}
+                  >
+                    <ArrowLeft size={17} /> Chatlar
+                  </button>
+                ) : (
+                  <button onClick={() => setIsDrawerOpen(true)} style={{ padding: '8px', borderRadius: '11px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#d8b4fe', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Menu size={19} />
+                  </button>
+                )}
+
+                <div
+                  onClick={() => {
+                    if (activeTab === 'chat' && isChatOpen && selectedContact) {
+                      openUserProfileModal(selectedContact.username)
+                    } else {
+                      setActiveTab('profile')
+                    }
+                  }}
+                  className="animated-avatar-ring"
+                  style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#000', flexShrink: 0, cursor: 'pointer' }}
+                  title="Profilni ko'rish uchun bosing"
+                >
+                  <Image
+                    src={activeTab === 'chat' && isChatOpen && selectedContact ? getUserAvatar(selectedContact.username, selectedContact.avatar) : profileAvatar}
+                    alt="Avatar"
+                    width={100}
+                    height={100}
+                    unoptimized
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                </div>
+
+                <div
+                  onClick={() => {
+                    if (activeTab === 'chat' && isChatOpen && selectedContact) {
+                      openUserProfileModal(selectedContact.username)
+                    }
+                  }}
+                  style={{ minWidth: 0, flex: 1, cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{ fontWeight: 700, fontSize: '14px', color: '#f472b6', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {activeTab === 'chat' && isChatOpen && selectedContact ? selectedContact.name : profileName}
+                    </span>
+                    <CheckCircle2 size={15} style={{ fill: 'url(#gradient-check)', color: '#fff', flexShrink: 0 }} />
+                    <svg width="0" height="0">
+                      <linearGradient id="gradient-check" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop stopColor="#ec4899" offset="0%" />
+                        <stop stopColor="#9333ea" offset="100%" />
+                      </linearGradient>
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#22d3ee', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {activeTab === 'chat' && isChatOpen && selectedContact
+                      ? `@${selectedContact.username} • Profilni ko'rish uchun bosing`
+                      : `ID: @${currentUser} • ${realtimeStatus === 'connected' ? 'Real-time ulangan' : realtimeStatus === 'connecting' ? 'Ulanmoqda…' : 'Aloqa uzildi'}`}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                <button onClick={() => startCall('audio')} style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(34, 211, 238, 0.15)', border: '1px solid rgba(34, 211, 238, 0.4)', color: '#22d3ee', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Audio qo'ng'iroq">
+                  <PhoneCall size={17} />
+                </button>
+                <button onClick={() => startCall('video')} style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(236, 72, 153, 0.15)', border: '1px solid rgba(236, 72, 153, 0.4)', color: '#f472b6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Video qo'ng'iroq">
+                  <Video size={17} />
+                </button>
+              </div>
+            </>
+          )}
         </header>
 
         {/* ASOSIY QISM */}
         <div className="mobile-scroll-area" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px 20px', boxSizing: 'border-box', WebkitOverflowScrolling: 'touch' }}>
-          {activeTab === 'chat' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
-              {/* Suhbatdosh tanlash tezkor paneli */}
-              {contacts.length > 0 && (
-                <div className="no-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', paddingBottom: '8px', borderBottom: '1px solid rgba(168,85,247,0.2)' }}>
-                  <span style={{ fontSize: '12px', color: '#9ca3af', flexShrink: 0 }}>Yaqinlar:</span>
-                  {contacts.map((c) => {
-                    const isSelected = selectedContact?.id === c.id
+          {messageSyncError && (
+            <div className="sync-error" role="alert">
+              <span>{messageSyncError}</span>
+              <button type="button" onClick={() => currentUser && void fetchMessages(currentUser)}>Qayta urinish</button>
+            </div>
+          )}
+
+          {/* TO'LIQ TELEGRAM USLUBIDAGI CHATLAR RO'YXATI */}
+          {activeTab === 'chat' && !isChatOpen && (
+            <div style={{ maxWidth: '850px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+              {/* Qidiruv qatori */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#14121d', border: '1px solid rgba(168, 85, 247, 0.35)', borderRadius: '16px', padding: '11px 16px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)' }}>
+                <Search size={18} color="#f472b6" />
+                <input
+                  type="text"
+                  value={chatSearchQuery}
+                  onChange={(e) => setChatSearchQuery(e.target.value)}
+                  placeholder="Chatlar, ismlar yoki @ID bo'yicha qidirish..."
+                  style={{ width: '100%', background: 'none', border: 'none', color: '#fff', fontSize: '15px', outline: 'none' }}
+                />
+              </div>
+
+              {/* Chatlar ro'yxati */}
+              {allChatPartners.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '50px 20px', borderRadius: '20px', backgroundColor: '#12101b', border: '1px solid rgba(168, 85, 247, 0.25)', marginTop: '10px' }}>
+                  <div style={{ fontSize: '42px', marginBottom: '10px' }}>💬</div>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#f472b6', marginBottom: '6px' }}>
+                    Hozircha chatlar ro&apos;yxati bo&apos;sh
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '18px', maxWidth: '340px', margin: '0 auto 18px auto' }}>
+                    Yaqiningizning ID manzilini Kontaktlar bo&apos;limidan qo&apos;shing yoki xabar yozishni boshlang!
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('contacts')}
+                    style={{ padding: '12px 24px', borderRadius: '14px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 700, fontSize: '14px', cursor: 'pointer', boxShadow: '0 0 20px rgba(236,72,153,0.4)' }}
+                  >
+                    Kontakt qo&apos;shish ✨
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', borderRadius: '22px', backgroundColor: '#0c0a14', border: '1px solid rgba(168, 85, 247, 0.35)', overflow: 'hidden', boxShadow: '0 10px 35px rgba(0,0,0,0.5)' }}>
+                  {allChatPartners.map((partner, idx) => {
+                    const lastInfo = getLastMessageWithUser(partner.username)
+                    const unread = unreadCounts[partner.username.toLowerCase()] || 0
+                    const isSaved = contacts.some((c) => c.username.toLowerCase() === partner.username.toLowerCase())
+
                     return (
-                      <button
-                        key={c.id}
-                        onClick={() => setSelectedContact(c)}
+                      <div
+                        key={partner.username}
+                        className="chat-list-row"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${partner.name} bilan suhbatni ochish`}
+                        onClick={() => handleSelectContactForChat(partner)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            handleSelectContactForChat(partner)
+                          }
+                        }}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          padding: '6px 12px',
-                          borderRadius: '999px',
-                          border: isSelected ? '1px solid #ec4899' : '1px solid rgba(255,255,255,0.15)',
-                          backgroundColor: isSelected ? 'rgba(236,72,153,0.25)' : '#18181b',
-                          color: '#fff',
-                          fontSize: '12px',
-                          fontWeight: 600,
+                          justifyContent: 'space-between',
+                          padding: '14px 18px',
                           cursor: 'pointer',
-                          flexShrink: 0,
+                          borderBottom: idx !== allChatPartners.length - 1 ? '1px solid rgba(168, 85, 247, 0.16)' : 'none',
+                          transition: 'background 0.2s',
+                          gap: '14px',
+                          backgroundColor: partner.isPinned ? 'rgba(147, 51, 234, 0.08)' : 'transparent',
                         }}
                       >
-                        <img src={c.avatar} alt={c.name} style={{ width: '18px', height: '18px', borderRadius: '50%' }} />
-                        {c.name}
-                      </button>
+                        {/* Profil rasmi (Bosganda profil va ID modal ochiladi) */}
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openUserProfileModal(partner.username)
+                          }}
+                          className="animated-avatar-ring"
+                          style={{ width: '56px', height: '56px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#18181b', position: 'relative' }}
+                          title="Profilni ko'rish va ID nusxalash"
+                        >
+                          <Image
+                            src={getUserAvatar(partner.username, partner.avatar)}
+                            alt={partner.name}
+                            width={112}
+                            height={112}
+                            unoptimized
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        </div>
+
+                        {/* Ism va oxirgi xabar */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '5px', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                              <span style={{ fontSize: '16px', fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {partner.name}
+                              </span>
+                              <Crown size={14} color="#facc15" style={{ flexShrink: 0 }} />
+                              {!isSaved && partner.username !== 'all' && (
+                                <span style={{ fontSize: '10px', padding: '1px 7px', borderRadius: '999px', backgroundColor: 'rgba(34,211,238,0.15)', border: '1px solid rgba(34,211,238,0.4)', color: '#22d3ee', fontWeight: 700, flexShrink: 0 }}>
+                                  @{partner.username}
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                              {lastInfo.isMine && <span style={{ fontSize: '11px', color: '#22d3ee', fontWeight: 800 }}>✓✓</span>}
+                              <span style={{ fontSize: '12px', color: '#9ca3af' }}>{lastInfo.time}</span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <div style={{ fontSize: '13.5px', color: lastInfo.hasDraft ? '#fbbf24' : unread > 0 ? '#f472b6' : '#9ca3af', fontWeight: unread > 0 ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {lastInfo.preview}
+                            </div>
+
+                            {unread > 0 ? (
+                              <span style={{ minWidth: '22px', height: '22px', padding: '0 7px', borderRadius: '999px', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontSize: '11px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 10px rgba(236,72,153,0.6)' }}>
+                                {unread}
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '999px', backgroundColor: 'rgba(147,51,234,0.2)', border: '1px solid rgba(168,85,247,0.4)', color: '#d8b4fe', fontWeight: 700, flexShrink: 0 }}>
+                                Ochish
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                          <button
+                            type="button"
+                            aria-label={partner.isPinned ? 'Chatni qadashni bekor qilish' : 'Chatni qadash'}
+                            title={partner.isPinned ? 'Qadashni bekor qilish' : 'Chatni qadash'}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              toggleChatPreference(partner.username, 'pinned')
+                            }}
+                            style={{ padding: '7px', borderRadius: '9px', border: '1px solid rgba(168,85,247,0.3)', background: 'rgba(147,51,234,0.12)', color: partner.isPinned ? '#facc15' : '#9ca3af', cursor: 'pointer' }}
+                          >
+                            <Pin size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={partner.isMuted ? 'Chat ovozini yoqish' : 'Chatni ovozsiz qilish'}
+                            title={partner.isMuted ? 'Ovozni yoqish' : 'Ovozini o‘chirish'}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              toggleChatPreference(partner.username, 'muted')
+                            }}
+                            style={{ padding: '7px', borderRadius: '9px', border: '1px solid rgba(168,85,247,0.3)', background: 'rgba(147,51,234,0.12)', color: partner.isMuted ? '#f472b6' : '#9ca3af', cursor: 'pointer' }}
+                          >
+                            <VolumeX size={15} />
+                          </button>
+                        </div>
+                      </div>
                     )
                   })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* CHAT XONASI */}
+          {activeTab === 'chat' && isChatOpen && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
+              {selectedContact && selectedContact.username !== 'all' && !contacts.some((c) => c.username.toLowerCase() === selectedContact.username.toLowerCase()) && (
+                <div style={{ padding: '10px 14px', borderRadius: '14px', backgroundColor: 'rgba(147, 51, 234, 0.18)', border: '1px solid rgba(236, 72, 153, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '12px', color: '#f3f4f6' }}>
+                    <strong>@{selectedContact.username}</strong> — Profilini ko&apos;rish va ID nusxalash:
+                  </span>
+                  <button
+                    onClick={() => openUserProfileModal(selectedContact.username)}
+                    style={{ padding: '6px 12px', borderRadius: '10px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Profil & ID Copy ✨
+                  </button>
                 </div>
               )}
 
               {displayedMessages.length === 0 && (
                 <div style={{ textAlign: 'center', color: '#6b7280', marginTop: '50px', fontSize: '14px', padding: '0 12px' }}>
                   {selectedContact
-                    ? `${selectedContact.name} (@${selectedContact.username}) bilan hali xabarlar yo'q. Birinchi bo'lib yozing! 💖`
-                    : "Hali xabarlar yo'q. Kontaktlar bo'limidan yaqiningizni qo'shing va yozishni boshlang! 💖"}
+                    ? `${selectedContact.name} bilan hali xabarlar yo'q. Birinchi bo'lib yozing! 💖`
+                    : "Hali xabarlar yo'q. Birinchi bo'lib yozing! 💖"}
                 </div>
               )}
 
               {displayedMessages.map((msg) => {
-                const isMine = msg.sender_id === currentUser
+                const isMine = msg.sender_id.toLowerCase() === currentUser
+                const senderClean = msg.sender_id.toLowerCase()
                 const theme = getThemeColors(isMine)
                 const isGift = msg.content.startsWith('GIFT_ANIMATION|')
-                let giftEmoji = '', giftName = ''
-                if (isGift) {
-                  const parts = msg.content.split('|')
-                  giftEmoji = parts[1]; giftName = parts[2]
-                }
+                const giftParts = isGift ? msg.content.split('|') : []
                 const isLetter = msg.content.startsWith('LETTER_CONTENT|')
                 const letterBody = isLetter ? msg.content.replace('LETTER_CONTENT|', '') : ''
                 const isOpened = openedLetterId === msg.id
@@ -1181,46 +1804,36 @@ export default function ChatPage() {
                 const isVoice = msg.content.startsWith('VOICE_NOTE|')
                 const voiceUrl = isVoice ? msg.content.replace('VOICE_NOTE|', '') : ''
 
-                const isCallRecord = msg.content.includes('qo\'ng\'iroq amalga oshirildi')
-
                 return (
-                  <div key={msg.id} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', width: '100%' }}>
-                    {isGift ? (
-                      <div className="animated-bubble" style={{ padding: '12px 18px', borderRadius: '18px', background: 'linear-gradient(135deg, rgba(236,72,153,0.35), rgba(147,51,234,0.45))', border: '2px solid #f472b6', textAlign: 'center', display: 'flex', alignItems: 'center', gap: '12px', maxWidth: '85%', boxSizing: 'border-box' }}>
-                        <span style={{ fontSize: '32px' }}>{giftEmoji}</span>
-                        <div style={{ textAlign: 'left', minWidth: 0 }}>
-                          <div style={{ fontSize: '11px', fontWeight: 700, color: '#f472b6' }}>SEHRLI SOVG'A</div>
-                          <div style={{ fontSize: '14px', fontWeight: 800, color: '#fff', wordBreak: 'break-word' }}>{giftName}</div>
-                        </div>
-                      </div>
-                    ) : isSticker ? (
-                      <div className="animated-bubble" style={{ padding: '12px 18px', borderRadius: '20px', background: 'linear-gradient(135deg, rgba(219,39,119,0.3), rgba(147,51,234,0.3))', border: '2px solid #ec4899', textAlign: 'center', fontSize: 'clamp(14px, 4vw, 17px)', fontWeight: 800, color: '#f472b6', boxShadow: '0 0 20px rgba(236,72,153,0.3)', maxWidth: '85%', boxSizing: 'border-box' }}>
-                        {msg.content}
-                      </div>
-                    ) : isVoice ? (
-                      <div className="animated-bubble" style={{ padding: '10px 14px', borderRadius: '16px', background: 'linear-gradient(135deg, rgba(34,211,238,0.25), rgba(147,51,234,0.35))', border: '1px solid #22d3ee', display: 'flex', alignItems: 'center', gap: '10px', maxWidth: '85%', boxSizing: 'border-box' }}>
-                        <Volume2 size={22} color="#22d3ee" style={{ flexShrink: 0 }} />
-                        <audio controls src={voiceUrl} style={{ height: '34px', width: '190px', maxWidth: '60vw' }} />
-                      </div>
-                    ) : isCallRecord ? (
-                      <div style={{ margin: '0 auto', padding: '7px 14px', borderRadius: '999px', backgroundColor: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.4)', color: '#d8b4fe', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'center' }}>
-                        {msg.content.includes('Video') ? <Video size={14} color="#f472b6" /> : <PhoneCall size={14} color="#22d3ee" />}
-                        {msg.content}
-                      </div>
-                    ) : isLetter ? (
-                      <div onClick={() => setOpenedLetterId(isOpened ? null : msg.id)} className="animated-bubble" style={{ width: '100%', maxWidth: '290px', padding: '14px', borderRadius: '16px', background: 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(219,39,119,0.3))', border: '2px solid #c084fc', cursor: 'pointer', boxSizing: 'border-box' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                          <Mail size={20} color="#f472b6" />
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#facc15' }}>{isOpened ? '💌 Ochilgan Maktub' : '💌 Maxfiy Maktub (Ochish)'}</span>
-                        </div>
-                        {isOpened && <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#09090b', borderRadius: '10px', fontSize: '13px', color: '#f3f4f6', lineHeight: '1.5', wordBreak: 'break-word' }}>{letterBody}</div>}
-                      </div>
-                    ) : (
-                      <div className="animated-bubble mobile-bubble" style={{ position: 'relative', maxWidth: '75%', padding: '12px 16px', borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: theme.bg, border: theme.border, boxSizing: 'border-box' }}>
-                        <div style={{ fontSize: '14px', color: '#f3f4f6', lineHeight: '1.45', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{msg.content}</div>
-                        <div style={{ fontSize: '10px', color: '#d8b4fe', marginTop: '5px', textAlign: 'right' }}>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ✓✓</div>
+                  <div key={msg.id} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: '8px', width: '100%' }}>
+                    {!isMine && (
+                      <div onClick={() => openUserProfileModal(senderClean)} className="animated-avatar-ring" style={{ width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, cursor: 'pointer', backgroundColor: '#18181b' }}>
+                        <Image src={getUserAvatar(senderClean)} alt={senderClean} width={72} height={72} unoptimized style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       </div>
                     )}
+                    <div style={{ position: 'relative', maxWidth: '75%', padding: '12px 16px', borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: theme.bg, border: theme.border, boxSizing: 'border-box' }}>
+                      {!isMine && <div onClick={() => openUserProfileModal(senderClean)} style={{ fontSize: '11px', fontWeight: 800, color: '#f472b6', marginBottom: '4px', cursor: 'pointer' }}>@{senderClean}</div>}
+                      {isGift ? (
+                        <div style={{ textAlign: 'center', minWidth: '100px' }}>
+                          <div style={{ fontSize: '36px' }}>{giftParts[1] || '🎁'}</div>
+                          <div style={{ color: '#f9a8d4', fontWeight: 700 }}>{giftParts[2] || 'Sovg‘a'}</div>
+                        </div>
+                      ) : isLetter ? (
+                        <div>
+                          <button type="button" onClick={() => setOpenedLetterId(isOpened ? null : msg.id)} style={{ border: 0, background: 'transparent', color: '#f9a8d4', cursor: 'pointer', fontWeight: 700 }}>
+                            {isOpened ? '💌 Maktubni yopish' : '💌 Maxfiy maktubni ochish'}
+                          </button>
+                          {isOpened && <div style={{ marginTop: '8px', fontSize: '14px', color: '#f3f4f6', lineHeight: '1.45', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{letterBody}</div>}
+                        </div>
+                      ) : isVoice ? (
+                        <audio controls preload="none" src={voiceUrl} aria-label="Ovozli xabar" style={{ maxWidth: '100%' }} />
+                      ) : isSticker ? (
+                        <div style={{ fontSize: '17px', color: '#f3f4f6', lineHeight: '1.45', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                      ) : (
+                        <div style={{ fontSize: '14px', color: '#f3f4f6', lineHeight: '1.45', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                      )}
+                      <div style={{ fontSize: '10px', color: '#d8b4fe', marginTop: '5px', textAlign: 'right' }}>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ✓✓</div>
+                    </div>
                   </div>
                 )
               })}
@@ -1228,657 +1841,192 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* KONTAKTLAR VA YAQINLAR BO'LIMI */}
+          {/* KONTAKTLAR */}
           {activeTab === 'contacts' && (
-            <div style={{ maxWidth: '850px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
-              <div style={{ padding: '12px 16px', borderRadius: '14px', backgroundColor: 'rgba(236, 72, 153, 0.12)', border: '1px solid rgba(236, 72, 153, 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ fontSize: '13px', color: '#f3f4f6', wordBreak: 'break-word' }}>
-                  Sizning unikal ID manzilingiz (yaqiningizga yuboring): <strong style={{ color: '#22d3ee' }}>@{currentUser}</strong>
-                </div>
-              </div>
-
-              <div style={{ padding: 'clamp(16px, 4vw, 22px)', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(56, 189, 248, 0.4)', boxSizing: 'border-box', boxShadow: '0 0 25px rgba(56, 189, 248, 0.1)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                  <div style={{ padding: '10px', borderRadius: '12px', backgroundColor: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <UserPlus size={20} />
-                  </div>
-                  <div>
-                    <h2 style={{ fontSize: '16px', fontWeight: 800, color: '#fff', margin: 0 }}>Yangi Kontakt Qo'shish</h2>
-                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>Juftingizning ID yoki Gmail manzilini kiriting</div>
-                  </div>
-                </div>
-
-                <form onSubmit={handleAddContact} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginTop: '10px' }}>
-                  <input
-                    type="text"
-                    value={newContactUsername}
-                    onChange={(e) => setNewContactUsername(e.target.value)}
-                    placeholder="ID yoki Email (masalan: @malikam)"
-                    style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(56, 189, 248, 0.35)', color: '#fff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
-                  />
-                  <input
-                    type="text"
-                    value={newContactName}
-                    onChange={(e) => setNewContactName(e.target.value)}
-                    placeholder="Ism (masalan: Malikam 💖)"
-                    style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(168, 85, 247, 0.35)', color: '#fff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
-                  />
-                  <button
-                    type="submit"
-                    disabled={isSavingContact}
-                    style={{ width: '100%', padding: '12px 18px', borderRadius: '12px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 0 15px rgba(236, 72, 153, 0.35)', opacity: isSavingContact ? 0.7 : 1, boxSizing: 'border-box' }}
-                  >
-                    <UserPlus size={18} /> {isSavingContact ? 'Saqlanmoqda...' : "Kontaktga qo'shish"}
-                  </button>
+            <div style={{ maxWidth: '850px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ padding: '20px', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(56, 189, 248, 0.4)' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 800, color: '#fff', margin: '0 0 10px 0' }}>Yangi Kontakt Qo&apos;shish</h2>
+                <form onSubmit={handleAddContact} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <input type="text" value={newContactUsername} onChange={(e) => setNewContactUsername(e.target.value)} placeholder="ID (masalan: @bek-2026)" style={{ padding: '12px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(56, 189, 248, 0.35)', color: '#fff', outline: 'none' }} />
+                  <input type="text" value={newContactName} onChange={(e) => setNewContactName(e.target.value)} placeholder="Ism (masalan: Bek 💖)" style={{ padding: '12px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(168, 85, 247, 0.35)', color: '#fff', outline: 'none' }} />
+                  <button type="submit" style={{ padding: '12px', borderRadius: '12px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Kontaktga qo&apos;shish</button>
                 </form>
-
-                {contactFeedback && (
-                  <div style={{ marginTop: '12px', fontSize: '13px', fontWeight: 600, color: contactFeedback.startsWith('✅') ? '#34d399' : '#f87171' }}>
-                    {contactFeedback}
-                  </div>
-                )}
+                {contactFeedback && <div style={{ marginTop: '10px', fontSize: '13px', fontWeight: 600, color: '#34d399' }}>{contactFeedback}</div>}
               </div>
 
-              <div style={{ padding: 'clamp(16px, 4vw, 22px)', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', boxSizing: 'border-box' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ padding: '10px', borderRadius: '12px', backgroundColor: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Users size={20} />
+              <div style={{ padding: '20px', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#f472b6', margin: '0 0 14px 0' }}>Mening Kontaktlarim ({contacts.length})</h3>
+                {contacts.map((c) => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', borderRadius: '12px', backgroundColor: '#0c0a14', marginBottom: '8px' }}>
+                    <div onClick={() => openUserProfileModal(c.username)} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                      <Image src={getUserAvatar(c.username, c.avatar)} alt={c.name} width={40} height={40} unoptimized style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '14px', color: '#fff' }}>{c.name}</div>
+                        <div style={{ fontSize: '12px', color: '#38bdf8' }}>@{c.username}</div>
+                      </div>
                     </div>
-                    <div>
-                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#f472b6', margin: 0 }}>Mening Kontaktlarim</h3>
-                      <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>Serverdagi ulangan yaqinlar: {contacts.length} ta</div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button onClick={() => handleSelectContactForChat(c)} style={{ padding: '8px 12px', borderRadius: '10px', background: '#9333ea', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 700 }}>Yozish</button>
+                      <button onClick={() => handleDeleteContact(c.id)} style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(239,68,68,0.2)', color: '#f87171', border: 'none', cursor: 'pointer' }}><Trash2 size={16} /></button>
                     </div>
-                  </div>
-                </div>
-
-                {contacts.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '30px 14px', color: '#9ca3af', fontSize: '14px' }}>
-                    Hozircha kontaktlar ro'yxati bo'sh. Yuqoridan yaqiningizning ID yoki Emailini kiritib qo'shing! 💖
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {contacts.map((contact) => {
-                      const isActive = selectedContact?.id === contact.id
-                      return (
-                        <div
-                          key={contact.id}
-                          className="contact-card-row"
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '12px 14px',
-                            borderRadius: '16px',
-                            backgroundColor: isActive ? 'rgba(147, 51, 234, 0.18)' : '#0c0a14',
-                            border: isActive ? '1px solid #ec4899' : '1px solid rgba(168, 85, 247, 0.3)',
-                            gap: '12px',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-                            <div className="animated-avatar-ring" style={{ width: '44px', height: '44px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: '#18181b' }}>
-                              <img src={contact.avatar} alt={contact.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            </div>
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '15px', fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.name}</span>
-                                <Crown size={14} color="#facc15" style={{ flexShrink: 0 }} />
-                              </div>
-                              <div style={{ fontSize: '12px', color: '#38bdf8', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{contact.username}</div>
-                              <div style={{ fontSize: '11px', color: '#34d399', marginTop: '2px' }}>{contact.status}</div>
-                            </div>
-                          </div>
-
-                          <div className="contact-card-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                            <button
-                              onClick={() => handleSelectContactForChat(contact)}
-                              style={{
-                                padding: '9px 16px',
-                                borderRadius: '12px',
-                                border: 'none',
-                                background: 'linear-gradient(to right, #ec4899, #9333ea)',
-                                color: '#fff',
-                                fontSize: '13px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                              }}
-                            >
-                              <MessageCircle size={16} /> Yozish
-                            </button>
-                            <button
-                              onClick={() => handleDeleteContact(contact.id)}
-                              style={{
-                                padding: '9px',
-                                borderRadius: '12px',
-                                border: '1px solid rgba(239, 68, 68, 0.35)',
-                                backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                                color: '#f87171',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                              title="Kontaktni o'chirish"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'gifts' && (
-            <div style={{ maxWidth: '900px', margin: '0 auto', width: '100%' }}>
-              <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#f472b6', marginBottom: '12px' }}>🎁 Magik Sovg'alar Do'koni</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))', gap: '12px' }}>
-                {ALL_GIFTS.map((gift) => (
-                  <div key={gift.id} style={{ padding: '14px', borderRadius: '16px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.35)', textAlign: 'center', boxSizing: 'border-box' }}>
-                    <div style={{ fontSize: '38px', marginBottom: '6px' }}>{gift.emoji}</div>
-                    <div style={{ fontWeight: 700, fontSize: '13px', color: '#fff' }}>{gift.name}</div>
-                    <button onClick={() => sendGift(gift.emoji, gift.name)} style={{ width: '100%', marginTop: '10px', padding: '9px', borderRadius: '10px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}>Yuborish ✨</button>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
+          {/* SOVG'ALAR */}
+          {activeTab === 'gifts' && (
+            <div style={{ maxWidth: '900px', margin: '0 auto', width: '100%' }}>
+              <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#f472b6', marginBottom: '12px' }}>🎁 Sovg&apos;alar Do&apos;koni</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))', gap: '12px' }}>
+                {ALL_GIFTS.map((g) => (
+                  <div key={g.id} style={{ padding: '14px', borderRadius: '16px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.35)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '38px', marginBottom: '6px' }}>{g.emoji}</div>
+                    <div style={{ fontWeight: 700, fontSize: '13px', color: '#fff' }}>{g.name}</div>
+                    <button onClick={() => sendGift(g.emoji, g.name)} style={{ width: '100%', marginTop: '10px', padding: '9px', borderRadius: '10px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Yuborish</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* JUFTLIK */}
+          {activeTab === 'couple' && (
+            <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center', padding: '30px', backgroundColor: '#18181b', borderRadius: '24px', border: '1px solid rgba(236,72,153,0.4)' }}>
+              <h2 style={{ color: '#f472b6', marginBottom: '10px' }}>💖 Sevgi Vaqti Hisoblagichi</h2>
+              <p style={{ fontSize: '22px', fontWeight: 800, color: '#fff' }}>{days} kun : {hours} soat : {minutes} daqiqa : {seconds} soniya</p>
+            </div>
+          )}
+
+          {/* PROFIL */}
           {activeTab === 'letters' && (
-            <div style={{ maxWidth: '700px', margin: '0 auto', width: '100%', padding: 'clamp(16px, 4vw, 24px)', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', boxSizing: 'border-box' }}>
-              <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#f472b6', marginBottom: '12px' }}>Maxfiy Sevgi Maktubi</h2>
-              <textarea value={letterText} onChange={(e) => setLetterText(e.target.value)} placeholder="Maktub matni..." rows={5} style={{ width: '100%', padding: '12px', borderRadius: '14px', backgroundColor: '#09090b', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#fff', marginBottom: '14px', outline: 'none', boxSizing: 'border-box', fontSize: '16px' }} />
-              <button onClick={sendLoveLetter} style={{ width: '100%', padding: '13px', borderRadius: '14px', border: 'none', background: 'linear-gradient(to right, #9333ea, #db2777)', color: '#fff', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}>Maktubni Yuborish 💌</button>
+            <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px', backgroundColor: '#18181b', borderRadius: '24px', border: '1px solid rgba(168,85,247,0.4)' }}>
+              <h2 style={{ color: '#f472b6', marginTop: 0 }}>💌 Maxfiy maktub</h2>
+              <p style={{ color: '#9ca3af', fontSize: '13px' }}>Maktub tanlangan suhbatga yuboriladi.</p>
+              <textarea
+                value={letterText}
+                onChange={(event) => setLetterText(event.target.value)}
+                placeholder="Yuragingizdagini yozing..."
+                rows={6}
+                style={{ width: '100%', padding: '12px', borderRadius: '12px', resize: 'vertical', background: '#09090b', border: '1px solid rgba(168,85,247,0.4)', color: '#fff' }}
+              />
+              <button type="button" onClick={() => void sendLoveLetter()} disabled={!letterText.trim()} style={{ marginTop: '10px', padding: '11px 16px', borderRadius: '12px', border: 0, background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 700, cursor: 'pointer', opacity: letterText.trim() ? 1 : 0.5 }}>
+                Maktubni yuborish
+              </button>
             </div>
           )}
 
           {activeTab === 'gallery' && (
-            <div style={{ maxWidth: '900px', margin: '0 auto', width: '100%', padding: 'clamp(16px, 4vw, 24px)', borderRadius: '20px', backgroundColor: '#18181b', border: '1px solid rgba(52, 211, 153, 0.4)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#34d399', margin: 0 }}>📸 Xotiralar Albomi</h2>
-
-              <div>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                    padding: '13px',
-                    borderRadius: '14px',
-                    backgroundColor: 'rgba(52, 211, 153, 0.15)',
-                    border: '1px dashed rgba(52, 211, 153, 0.6)',
-                    color: '#34d399',
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                  }}
-                >
-                  <Plus size={18} /> Rasm qo'shish
-                  <input type="file" accept="image/*" onChange={handleMemoryPhotoUpload} style={{ display: 'none' }} />
-                </label>
-              </div>
-
+            <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px', backgroundColor: '#18181b', borderRadius: '24px', border: '1px solid rgba(168,85,247,0.4)' }}>
+              <h2 style={{ color: '#34d399', marginTop: 0 }}>🖼️ Xotiralar galereyasi</h2>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderRadius: '12px', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
+                <Camera size={17} /> Rasm qo‘shish
+                <input type="file" accept="image/*" onChange={handleMemoryPhotoUpload} style={{ display: 'none' }} />
+              </label>
               {memories.length === 0 ? (
-                <div
-                  style={{
-                    padding: '32px 16px',
-                    borderRadius: '16px',
-                    backgroundColor: 'rgba(52, 211, 153, 0.05)',
-                    border: '1px solid rgba(52, 211, 153, 0.2)',
-                    textAlign: 'center',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                  }}
-                >
-                  <span style={{ fontSize: '38px' }}>🥺💖</span>
-                  <div style={{ fontSize: '18px', fontWeight: 800, color: '#34d399', letterSpacing: '1px' }}>
-                    "I Miss You so much..." ✨
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#9ca3af', maxWidth: '350px', lineHeight: '1.5' }}>
-                    Hali birorta xotira rasmi yuklanmadi. Yuqoridagi tugmani bosib eng go'zal daqiqalaringizni qo'shing! 🌹
-                  </div>
-                </div>
+                <p style={{ color: '#9ca3af', textAlign: 'center', padding: '30px 0' }}>Hali xotiralar yo‘q. Birinchi rasmingizni qo‘shing.</p>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))', gap: '10px' }}>
-                  {memories.map((url, idx) => (
-                    <div key={idx} style={{ height: '145px', borderRadius: '14px', overflow: 'hidden', border: '1px solid rgba(52, 211, 153, 0.3)', boxSizing: 'border-box' }}><img src={url} alt="Memory" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '12px', marginTop: '16px' }}>
+                  {memories.map((memory, index) => (
+                    <Image key={`${index}-${memory.slice(0, 20)}`} src={memory} alt={`Xotira ${index + 1}`} width={400} height={300} unoptimized style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '12px' }} />
                   ))}
                 </div>
               )}
             </div>
           )}
 
-          {activeTab === 'couple' && (
-            <div style={{ maxWidth: '800px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
-              <div
-                style={{
-                  padding: 'clamp(22px, 5vw, 36px) 16px',
-                  borderRadius: '24px',
-                  background: 'linear-gradient(135deg, rgba(88,28,135,0.5), rgba(131,24,67,0.4))',
-                  border: '1px solid rgba(236, 72, 153, 0.5)',
-                  textAlign: 'center',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
-                  <span style={{ fontSize: 'clamp(28px, 7vw, 38px)' }}>💖</span>
-                  <div
-                    style={{
-                      padding: '7px 16px',
-                      borderRadius: '999px',
-                      background: 'linear-gradient(to right, #ec4899, #9333ea)',
-                      color: '#fff',
-                      fontWeight: 800,
-                      fontSize: '14px',
-                      letterSpacing: '2px',
-                      boxShadow: '0 0 20px rgba(236,72,153,0.8)',
-                    }}
-                  >
-                    LOVE ✨
-                  </div>
-                  <span style={{ fontSize: 'clamp(28px, 7vw, 38px)' }}>💘</span>
-                </div>
-
-                <div style={{ fontSize: '14px', fontWeight: 700, color: '#f472b6', marginBottom: '8px' }}>
-                  {relationshipStarted ? '💖 Sevgi vaqti soniyama-soniya o\'lchanmoqda...' : '⏳ Suhbat kutilmoqda'}
-                </div>
-
-                <div style={{ fontSize: 'clamp(17px, 4.8vw, 26px)', fontWeight: 800, color: '#fff', letterSpacing: '0.5px', wordBreak: 'break-word' }}>
-                  {days} kun : {hours} soat : {minutes} daqiqa : {seconds} soniya
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 'clamp(16px, 4vw, 24px)',
-                  borderRadius: '24px',
-                  backgroundColor: '#140c22',
-                  border: '2px solid rgba(234, 179, 8, 0.5)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-                  <Crown size={24} color="#facc15" style={{ flexShrink: 0 }} />
-                  <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#facc15', margin: 0 }}>
-                    Linksy Premium Imkoniyatlari
-                  </h2>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {[
-                    { title: '👑 Oltin Ism va Maxsus Nishon', desc: 'Ismingiz va chat ramkangiz oltin rangda porlab turadi.' },
-                    { title: '🏰 VIP Magik Sovg\'alar', desc: 'Sehrli qasr va olovli ajdarlarni cheklovsiz yuborish.' },
-                    { title: '💌 Cheksiz Maxfiy Maktublar', desc: 'Xotiralar albomi va maxfiy konvertlarni kengaytirilgan hajmda saqlash.' },
-                  ].map((item, idx) => (
-                    <div key={idx} style={{ padding: '12px 14px', borderRadius: '14px', backgroundColor: '#1a1426', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#facc15' }}>{item.title}</div>
-                      <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '3px' }}>{item.desc}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
           {activeTab === 'profile' && (
-            <div style={{ maxWidth: '800px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
-              <div
-                style={{
-                  padding: '20px 16px',
-                  borderRadius: '24px',
-                  backgroundColor: '#18181b',
-                  border: '1px solid rgba(168, 85, 247, 0.4)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  textAlign: 'center',
-                }}
-              >
-                <div
-                  onClick={() => setIsAvatarModalOpen(true)}
-                  className="animated-avatar-ring"
-                  style={{ position: 'relative', width: '88px', height: '88px', borderRadius: '50%', overflow: 'hidden', marginBottom: '12px', cursor: 'zoom-in' }}
-                  title="Rasmni katta qilib ko'rish"
-                >
-                  <img src={profileAvatar} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                </div>
-
-                <div style={{ fontSize: '17px', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  {profileName}
-                  <CheckCircle2 size={16} style={{ fill: 'url(#gradient-check-prof)', color: '#fff' }} />
-                  <svg width="0" height="0">
-                    <linearGradient id="gradient-check-prof" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop stopColor="#ec4899" offset="0%" />
-                      <stop stopColor="#9333ea" offset="100%" />
-                    </linearGradient>
-                  </svg>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'linear-gradient(135deg, rgba(236,72,153,0.25), rgba(147,51,234,0.35))', border: '1px solid rgba(244,114,182,0.6)', color: '#f472b6', padding: '2px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, boxShadow: '0 0 10px rgba(236,72,153,0.4)' }}>
-                    <Crown size={11} color="#facc15" /> ROYAL LOVE ✨
-                  </span>
-                </div>
-
-                <div style={{ fontSize: '13px', color: '#22d3ee', marginTop: '4px' }}>ID: @{currentUser}</div>
-                <div style={{ fontSize: '13px', color: '#9ca3af', marginTop: '8px', fontStyle: 'italic', wordBreak: 'break-word', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                  "{profileBio}" <CheckCircle2 size={14} style={{ fill: '#34d399', color: '#fff', flexShrink: 0 }} />
-                </div>
+            <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px', backgroundColor: '#18181b', borderRadius: '24px', border: '1px solid rgba(168,85,247,0.4)', textAlign: 'center' }}>
+              <div onClick={() => { setZoomedAvatarUrl(profileAvatar); setIsAvatarModalOpen(true); }} style={{ width: '80px', height: '80px', borderRadius: '50%', overflow: 'hidden', margin: '0 auto 12px auto', cursor: 'zoom-in' }}>
+                <Image src={profileAvatar} alt="Profil rasmi" width={160} height={160} unoptimized style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
-
-              {/* PROFILNI TAHRIRLASH */}
-              <div
-                style={{
-                  padding: '18px 16px',
-                  borderRadius: '20px',
-                  backgroundColor: '#18181b',
-                  border: '1px solid rgba(168, 85, 247, 0.3)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '14px',
-                }}
-              >
-                <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#f472b6', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Settings size={18} /> Profilni Tahrirlash
-                </h3>
-
-                <div>
-                  <label style={{ fontSize: '12px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Profil rasmini o'zgartirish (Bazaga saqlanadi):</label>
-                  <label
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      padding: '12px',
-                      borderRadius: '12px',
-                      backgroundColor: 'rgba(168, 85, 247, 0.15)',
-                      border: '1px dashed rgba(168, 85, 247, 0.6)',
-                      color: '#d8b4fe',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                    }}
-                  >
-                    <Camera size={18} /> Yangi rasm tanlash
-                    <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
-                  </label>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '12px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Ismingiz:</label>
-                  <input
-                    type="text"
-                    value={profileName}
-                    onChange={(e) => setProfileName(e.target.value)}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(168,85,247,0.3)', color: '#fff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '12px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>Bio (Status / Tavsif):</label>
-                  <input
-                    type="text"
-                    value={profileBio}
-                    onChange={(e) => handleBioChange(e.target.value)}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', backgroundColor: '#09090b', border: '1px solid rgba(168,85,247,0.3)', color: '#fff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
-                  />
-                </div>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '12px', color: '#d8b4fe', cursor: 'pointer', fontSize: '13px' }}>
+                <Camera size={16} /> Profil rasmini o‘zgartirish
+                <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
+              </label>
+              <h2 style={{ color: '#fff', margin: '0 0 4px 0' }}>{profileName}</h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '12px' }}>
+                <span style={{ color: '#22d3ee' }}>ID: @{currentUser}</span>
+                <button onClick={() => handleCopyUserId(currentUser)} style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: 'rgba(34,211,238,0.2)', color: '#22d3ee', border: 'none', cursor: 'pointer', fontSize: '11px' }}>Copy</button>
               </div>
-
-              {/* MAXFIYLIK BO'LIMI */}
-              <div
-                style={{
-                  padding: '18px 16px',
-                  borderRadius: '20px',
-                  backgroundColor: '#18181b',
-                  border: '1px solid rgba(236, 72, 153, 0.4)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
-                }}
-              >
-                <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#f472b6', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Shield size={18} /> Maxfiylik Sozlamalari
-                </h3>
-
-                {/* Online holati */}
-                <div style={{ backgroundColor: '#0c0a14', borderRadius: '14px', border: '1px solid rgba(34, 211, 238, 0.3)', overflow: 'hidden' }}>
-                  <div
-                    onClick={() => setOnlineMenuOpen(!onlineMenuOpen)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', cursor: 'pointer' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(34, 211, 238, 0.15)', color: '#22d3ee' }}>
-                        <Eye size={18} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>Online holatini ko'rish</div>
-                        <div style={{ fontSize: '11px', color: '#22d3ee', textTransform: 'capitalize' }}>Tanlangan: {onlineStatus}</div>
-                      </div>
-                    </div>
-                    <ChevronRight size={18} color="#9ca3af" style={{ transform: onlineMenuOpen ? 'rotate(90deg)' : 'none', transition: '0.2s' }} />
-                  </div>
-
-                  {onlineMenuOpen && (
-                    <div style={{ padding: '0 14px 12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {[
-                        { id: 'all', label: 'Hamma' },
-                        { id: 'contacts', label: 'Faqat Kontaktlar' },
-                        { id: 'nobody', label: 'Hech kim' },
-                      ].map((opt) => (
-                        <button
-                          key={opt.id}
-                          onClick={() => { setOnlineStatus(opt.id as any); setOnlineMenuOpen(false); }}
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: '10px',
-                            backgroundColor: onlineStatus === opt.id ? 'rgba(34, 211, 238, 0.25)' : '#18181b',
-                            border: onlineStatus === opt.id ? '1px solid #22d3ee' : '1px solid transparent',
-                            color: onlineStatus === opt.id ? '#22d3ee' : '#d1d5db',
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Xabar yozish ruxsati */}
-                <div style={{ backgroundColor: '#0c0a14', borderRadius: '14px', border: '1px solid rgba(236, 72, 153, 0.3)', overflow: 'hidden' }}>
-                  <div
-                    onClick={() => setMessageMenuOpen(!messageMenuOpen)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', cursor: 'pointer' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(236, 72, 153, 0.15)', color: '#f472b6' }}>
-                        <Lock size={18} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>Kimlar xabar yoza oladi</div>
-                        <div style={{ fontSize: '11px', color: '#f472b6', textTransform: 'capitalize' }}>Tanlangan: {messagePermission}</div>
-                      </div>
-                    </div>
-                    <ChevronRight size={18} color="#9ca3af" style={{ transform: messageMenuOpen ? 'rotate(90deg)' : 'none', transition: '0.2s' }} />
-                  </div>
-
-                  {messageMenuOpen && (
-                    <div style={{ padding: '0 14px 12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {[
-                        { id: 'all', label: 'Hamma' },
-                        { id: 'contacts', label: 'Faqat Kontaktlar' },
-                        { id: 'nobody', label: 'Hech kim' },
-                      ].map((opt) => (
-                        <button
-                          key={opt.id}
-                          onClick={() => { setMessagePermission(opt.id as any); setMessageMenuOpen(false); }}
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: '10px',
-                            backgroundColor: messagePermission === opt.id ? 'rgba(236, 72, 153, 0.25)' : '#18181b',
-                            border: messagePermission === opt.id ? '1px solid #f472b6' : '1px solid transparent',
-                            color: messagePermission === opt.id ? '#f472b6' : '#d1d5db',
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Qo'ng'iroqlar ruxsati */}
-                <div style={{ backgroundColor: '#0c0a14', borderRadius: '14px', border: '1px solid rgba(168, 85, 247, 0.3)', overflow: 'hidden' }}>
-                  <div
-                    onClick={() => setCallMenuOpen(!callMenuOpen)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', cursor: 'pointer' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' }}>
-                        <PhoneCall size={18} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>Kimlar qo'ng'iroq qila oladi</div>
-                        <div style={{ fontSize: '11px', color: '#c084fc', textTransform: 'capitalize' }}>Tanlangan: {callPermission}</div>
-                      </div>
-                    </div>
-                    <ChevronRight size={18} color="#9ca3af" style={{ transform: callMenuOpen ? 'rotate(90deg)' : 'none', transition: '0.2s' }} />
-                  </div>
-
-                  {callMenuOpen && (
-                    <div style={{ padding: '0 14px 12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {[
-                        { id: 'all', label: 'Hamma' },
-                        { id: 'contacts', label: 'Faqat Kontaktlar' },
-                        { id: 'nobody', label: 'Hech kim' },
-                      ].map((opt) => (
-                        <button
-                          key={opt.id}
-                          onClick={() => { setCallPermission(opt.id as any); setCallMenuOpen(false); }}
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: '10px',
-                            backgroundColor: callPermission === opt.id ? 'rgba(168, 85, 247, 0.25)' : '#18181b',
-                            border: callPermission === opt.id ? '1px solid #c084fc' : '1px solid transparent',
-                            color: callPermission === opt.id ? '#c084fc' : '#d1d5db',
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Ilova paroli */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', backgroundColor: '#0c0a14', borderRadius: '14px', border: '1px solid rgba(234, 179, 8, 0.3)', gap: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: 'rgba(234, 179, 8, 0.15)', color: '#facc15' }}>
-                      <KeyRound size={18} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>Ilova paroli (App Lock)</div>
-                      <div style={{ fontSize: '11px', color: '#9ca3af' }}>Maxfiylikni kuchaytirish</div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setAppLockEnabled(!appLockEnabled)}
-                    style={{ padding: '6px 12px', borderRadius: '10px', backgroundColor: appLockEnabled ? '#f59e0b' : '#27272a', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600, flexShrink: 0 }}
-                  >
-                    {appLockEnabled ? 'Yoqilgan' : 'O\'chirilgan'}
+              <input type="text" value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="Ism" style={{ width: '100%', padding: '10px', borderRadius: '10px', backgroundColor: '#09090b', border: '1px solid #333', color: '#fff', marginBottom: '10px', outline: 'none' }} />
+              <input type="text" value={profileBio} onChange={(e) => handleBioChange(e.target.value)} placeholder="Bio status..." style={{ width: '100%', padding: '10px', borderRadius: '10px', backgroundColor: '#09090b', border: '1px solid #333', color: '#fff', outline: 'none' }} />
+              <label style={{ display: 'block', marginTop: '16px', textAlign: 'left', color: '#d8b4fe', fontSize: '13px' }}>
+                Xabar yuborish
+                <select value={messagePermission} onChange={(event) => setMessagePermission(event.target.value as typeof messagePermission)} style={{ display: 'block', width: '100%', marginTop: '6px', padding: '10px', borderRadius: '10px', background: '#09090b', border: '1px solid #333', color: '#fff' }}>
+                  <option value="all">Barchaga</option>
+                  <option value="contacts">Faqat kontaktlarimga</option>
+                  <option value="nobody">Hech kimga</option>
+                </select>
+              </label>
+              <label style={{ display: 'block', marginTop: '12px', textAlign: 'left', color: '#d8b4fe', fontSize: '13px' }}>
+                Qo‘ng‘iroqlar
+                <select value={callPermission} onChange={(event) => setCallPermission(event.target.value as typeof callPermission)} style={{ display: 'block', width: '100%', marginTop: '6px', padding: '10px', borderRadius: '10px', background: '#09090b', border: '1px solid #333', color: '#fff' }}>
+                  <option value="all">Barchaga</option>
+                  <option value="contacts">Faqat kontaktlarimga</option>
+                  <option value="nobody">Hech kimga</option>
+                </select>
+              </label>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '14px' }}>
+                {(['purple', 'pink', 'gold'] as const).map((theme) => (
+                  <button key={theme} type="button" onClick={() => setBubbleTheme(theme)} aria-pressed={bubbleTheme === theme} style={{ padding: '8px 12px', borderRadius: '10px', border: bubbleTheme === theme ? '2px solid #fff' : '1px solid #555', background: theme === 'pink' ? '#be185d' : theme === 'gold' ? '#a16207' : '#6b21a8', color: '#fff', cursor: 'pointer' }}>
+                    {theme === 'purple' ? 'Binafsha' : theme === 'pink' ? 'Pushti' : 'Oltin'}
                   </button>
-                </div>
+                ))}
               </div>
             </div>
           )}
         </div>
 
-        {/* INPUT QISMI */}
-        {activeTab === 'chat' && (
-          <div style={{ position: 'relative', flexShrink: 0, maxWidth: '900px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+        {/* INPUT QISMI (Faqat chat ichida) */}
+        {activeTab === 'chat' && isChatOpen && (
+          <form onSubmit={sendMessage} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 16px', borderTop: '1px solid rgba(147, 51, 234, 0.3)', backgroundColor: '#0c0a14', flexShrink: 0 }}>
             {showEmojiPicker && (
-              <div style={{ position: 'absolute', bottom: '100%', left: '10px', right: '10px', maxHeight: '220px', overflowY: 'auto', backgroundColor: '#121019', border: '1px solid rgba(168,85,247,0.4)', borderRadius: '16px', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(40px, 1fr))', gap: '6px', zIndex: 40, boxShadow: '0 -4px 20px rgba(0,0,0,0.5)' }}>
-                {EMOJI_LIST.map((emoji, idx) => (
-                  <button key={idx} onClick={() => addEmojiToInput(emoji)} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', padding: '4px', borderRadius: '8px', textAlign: 'center' }}>{emoji}</button>
+              <div aria-label="Emoji tanlash" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxHeight: '110px', overflowY: 'auto' }}>
+                {EMOJI_LIST.map((emoji) => (
+                  <button key={emoji} type="button" onClick={() => addEmojiToInput(emoji)} style={{ padding: '5px', border: 0, borderRadius: '8px', background: '#18181b', fontSize: '20px', cursor: 'pointer' }}>{emoji}</button>
                 ))}
               </div>
             )}
-
             {showStickerPicker && (
-              <div style={{ position: 'absolute', bottom: '100%', left: '10px', right: '10px', maxHeight: '240px', overflowY: 'auto', backgroundColor: '#121019', border: '1px solid rgba(236,72,153,0.4)', borderRadius: '16px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 40, boxShadow: '0 -4px 20px rgba(0,0,0,0.5)' }}>
-                <div style={{ fontSize: '12px', color: '#f472b6', fontWeight: 700, marginBottom: '2px' }}>✨ Sevgi Stikerlarini tanlang:</div>
-                {LOVE_STICKERS.map((st) => (
-                  <button key={st.id} onClick={() => sendSticker(st.content)} style={{ padding: '10px', borderRadius: '12px', border: '1px solid rgba(236,72,153,0.3)', backgroundColor: 'rgba(236,72,153,0.15)', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}>
-                    {st.label}
-                  </button>
+              <div aria-label="Stiker tanlash" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {LOVE_STICKERS.map((sticker) => (
+                  <button key={sticker.id} type="button" onClick={() => void sendSticker(sticker.content)} style={{ padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(168,85,247,0.35)', background: '#18181b', color: '#fff', cursor: 'pointer' }}>{sticker.label}</button>
                 ))}
               </div>
             )}
-
-            <form onSubmit={sendMessage} className="mobile-input-form" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderTop: '1px solid rgba(147, 51, 234, 0.3)', backgroundColor: '#0c0a14', boxSizing: 'border-box' }}>
-              <button type="button" onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowStickerPicker(false); }} style={{ background: 'none', border: 'none', color: '#f472b6', cursor: 'pointer', padding: '4px', flexShrink: 0, display: 'flex', alignItems: 'center' }} title="Emojilar">
-                <Smile size={21} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button type="button" aria-label="Emoji tanlash" onClick={() => { setShowEmojiPicker((shown) => !shown); setShowStickerPicker(false) }} style={{ padding: '9px', border: 0, borderRadius: '10px', background: '#18181b', color: '#f9a8d4', cursor: 'pointer' }}>
+                <Smile size={19} />
               </button>
-              <button type="button" onClick={() => { setShowStickerPicker(!showStickerPicker); setShowEmojiPicker(false); }} style={{ background: 'none', border: 'none', color: '#c084fc', cursor: 'pointer', padding: '4px', fontSize: '17px', flexShrink: 0, display: 'flex', alignItems: 'center' }} title="Stikerlar">
-                ✨
+              <button type="button" aria-label="Stiker tanlash" onClick={() => { setShowStickerPicker((shown) => !shown); setShowEmojiPicker(false) }} style={{ padding: '9px', border: 0, borderRadius: '10px', background: '#18181b', color: '#d8b4fe', cursor: 'pointer' }}>
+                <Gift size={19} />
               </button>
-
-              {isRecording ? (
-                <button
-                  type="button"
-                  onClick={stopRecording}
-                  style={{ padding: '8px 10px', borderRadius: '10px', border: 'none', backgroundColor: '#ef4444', color: '#fff', fontWeight: 700, fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}
-                >
-                  <Square size={14} /> Stop
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={startRecording}
-                  style={{ background: 'none', border: 'none', color: '#22d3ee', cursor: 'pointer', padding: '4px', flexShrink: 0, display: 'flex', alignItems: 'center' }}
-                  title="Ovozli xabar yozish"
-                >
-                  <Mic size={21} />
-                </button>
-              )}
-
+              <button type="button" aria-label={isRecording ? 'Ovoz yozishni to‘xtatish' : 'Ovoz yozishni boshlash'} onClick={isRecording ? stopRecording : () => void startRecording()} style={{ padding: '9px', border: 0, borderRadius: '10px', background: isRecording ? '#991b1b' : '#18181b', color: '#fca5a5', cursor: 'pointer' }}>
+                {isRecording ? <MicOff size={19} /> : <Mic size={19} />}
+              </button>
               <input
                 type="text"
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={selectedContact ? `${selectedContact.name} ga yozing...` : 'Xabar yozing... 💌'}
-                style={{ flex: 1, minWidth: 0, padding: '10px 14px', borderRadius: '14px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#ffffff', fontSize: '16px', outline: 'none', boxSizing: 'border-box' }}
+                onChange={(e) => handleInputChange(e.target.value)}
+                placeholder={selectedContact ? `${selectedContact.name} ga yozing...` : 'Xabar yozing...'}
+                style={{ minWidth: 0, flex: 1, padding: '10px 14px', borderRadius: '14px', backgroundColor: '#18181b', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#ffffff', fontSize: '16px', outline: 'none' }}
               />
-              <button type="submit" className="mobile-send-btn" style={{ padding: '11px 18px', borderRadius: '14px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#ffffff', fontWeight: 600, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button type="submit" disabled={!newMessage.trim()} style={{ padding: '11px 18px', borderRadius: '14px', border: 'none', background: 'linear-gradient(to right, #ec4899, #9333ea)', color: '#ffffff', fontWeight: 600, cursor: 'pointer', display: 'flex', opacity: newMessage.trim() ? 1 : 0.55 }}>
                 <Send size={18} />
               </button>
-            </form>
-          </div>
+            </div>
+          </form>
         )}
 
         {/* NAVIGATION BAR */}
-        <nav className="mobile-nav" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', borderTop: '1px solid rgba(147, 51, 234, 0.3)', backgroundColor: '#09090b', padding: '10px 12px', flexShrink: 0, boxSizing: 'border-box', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
-          <button onClick={() => setActiveTab('chat')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'chat' ? '#22d3ee' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '2px 0' }}><MessageCircle size={19} /> Suhbat</button>
-          <button onClick={() => setActiveTab('contacts')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'contacts' ? '#38bdf8' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '2px 0' }}><Users size={19} /> Kontaktlar</button>
-          <button onClick={() => setActiveTab('gifts')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'gifts' ? '#f472b6' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '2px 0' }}><Gift size={19} /> Sovg'alar</button>
-          <button onClick={() => setActiveTab('couple')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'couple' ? '#c084fc' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '2px 0' }}><CalendarHeart size={19} /> Juftlik</button>
-          <button onClick={() => setActiveTab('profile')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'profile' ? '#facc15' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '2px 0' }}><User size={19} /> Profil</button>
+        <nav style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', borderTop: '1px solid rgba(147, 51, 234, 0.3)', backgroundColor: '#09090b', padding: '10px 12px', flexShrink: 0 }}>
+          <button onClick={() => { setActiveTab('chat'); setIsChatOpen(false); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'chat' ? '#22d3ee' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}><MessageCircle size={19} /> Chatlar</button>
+          <button onClick={() => setActiveTab('contacts')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'contacts' ? '#38bdf8' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}><Users size={19} /> Kontaktlar</button>
+          <button onClick={() => setActiveTab('gifts')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'gifts' ? '#f472b6' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}><Gift size={19} /> Sovg&apos;alar</button>
+          <button onClick={() => setActiveTab('couple')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'couple' ? '#c084fc' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}><CalendarHeart size={19} /> Juftlik</button>
+          <button onClick={() => setActiveTab('profile')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: activeTab === 'profile' ? '#facc15' : '#6b7280', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}><User size={19} /> Profil</button>
         </nav>
       </div>
     </div>

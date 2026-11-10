@@ -1,0 +1,4 @@
+project_id = "linksy"
+
+[functions.username-auth]
+verify_jwt = false

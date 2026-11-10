@@ -1,17 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
-import Image from 'next/image'
-import { Crown, ArrowRight, MessageCircle } from 'lucide-react'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { Crown } from 'lucide-react'
 
-export default function HomePage() {
-  const [isLoaded, setIsLoaded] = useState(false)
+export default function SplashPage() {
+  const router = useRouter()
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoaded(true), 100)
+    const timer = setTimeout(() => {
+      router.push('/chat') // 3 soniyadan keyin chat sahifasiga o'tadi
+    }, 3000)
+
     return () => clearTimeout(timer)
-  }, [])
+  }, [router])
 
   return (
     <div
@@ -20,108 +22,77 @@ export default function HomePage() {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: '100vh',
-        width: '100%',
+        width: '100vw',
+        height: '100dvh',
         backgroundColor: '#050508',
         color: '#ffffff',
         fontFamily: 'sans-serif',
-        padding: '20px',
-        boxSizing: 'border-box',
-        opacity: isLoaded ? 1 : 0,
-        transform: isLoaded ? 'scale(1)' : 'scale(0.95)',
-        transition: 'opacity 0.8s ease-out, transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
         overflow: 'hidden',
-        position: 'relative',
+        userSelect: 'none',
       }}
     >
-      <div
-        style={{
-          position: 'absolute',
-          width: '320px',
-          height: '320px',
-          background: 'radial-gradient(circle, rgba(147, 51, 234, 0.3) 0%, rgba(0, 0, 0, 0) 70%)',
-          top: '20%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          zIndex: 0,
-          pointerEvents: 'none',
-        }}
-      />
+      {/* Xatolik bermaydigan oddiy style tegi */}
+      <style>{`
+        @keyframes logoFloat {
+          0%, 100% {
+            transform: translateY(0px) scale(1);
+            filter: drop-shadow(0 0 15px rgba(236, 72, 153, 0.6));
+          }
+          50% {
+            transform: translateY(-8px) scale(1.05);
+            filter: drop-shadow(0 0 35px rgba(147, 51, 234, 0.9));
+          }
+        }
+        @keyframes welcomeGlow {
+          0%, 100% {
+            opacity: 0.7;
+            text-shadow: 0 0 10px rgba(236, 72, 153, 0.5), 0 0 20px rgba(147, 51, 234, 0.3);
+            transform: scale(0.98);
+          }
+          50% {
+            opacity: 1;
+            text-shadow: 0 0 25px rgba(244, 114, 182, 1), 0 0 45px rgba(168, 85, 247, 0.9);
+            transform: scale(1.02);
+          }
+        }
+        .splash-logo {
+          animation: logoFloat 2.5s infinite ease-in-out;
+        }
+        .welcome-text {
+          animation: welcomeGlow 1.8s infinite ease-in-out;
+        }
+      `}</style>
 
+      {/* Logotip va toj */}
       <div
+        className="splash-logo"
         style={{
-          position: 'relative',
-          zIndex: 1,
           display: 'flex',
-          flexDirection: 'column',
           alignItems: 'center',
-          textAlign: 'center',
-          maxWidth: '500px',
-          width: '100%',
-          padding: '40px 24px',
-          borderRadius: '24px',
-          backgroundColor: 'rgba(12, 10, 20, 0.75)',
-          border: '1px solid rgba(168, 85, 247, 0.35)',
-          boxShadow: '0 10px 40px rgba(147, 51, 234, 0.2)',
-          backdropFilter: 'blur(12px)',
+          gap: '10px',
+          fontSize: 'clamp(36px, 8vw, 52px)',
+          fontWeight: 900,
+          color: '#f472b6',
+          marginBottom: '16px',
         }}
       >
-        {/* ANIMATSIYALI LOGOTIP */}
-        <div
-          style={{
-            position: 'relative',
-            width: '90px',
-            height: '90px',
-            borderRadius: '50%',
-            overflow: 'hidden',
-            border: '2px solid rgba(244, 114, 182, 0.6)',
-            boxShadow: '0 0 30px rgba(236, 72, 153, 0.5)',
-            marginBottom: '20px',
-            animation: 'pulse 2s infinite',
-            backgroundColor: '#000',
-          }}
-        >
-          <Image
-            src="/logo.png"
-            alt="Linksy Logo"
-            fill
-            sizes="90px"
-            style={{ objectFit: 'cover' }}
-            priority
-          />
-        </div>
+        Linksy <Crown size={38} color="#facc15" />
+      </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <h1 style={{ fontSize: '32px', fontWeight: 800, color: '#f472b6', margin: 0 }}>
-            Linksy
-          </h1>
-          <Crown size={22} color="#facc15" />
-        </div>
-
-        <p style={{ fontSize: '14px', color: '#9ca3af', lineHeight: '1.6', marginBottom: '28px' }}>
-          Sevishganlar uchun maxsus yaratilgan magik va real-time messenjer. Qasrlar, sovg'alar va cheksiz muhabbat! ✨
-        </p>
-
-        <Link
-          href="/chat"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '10px',
-            width: '100%',
-            padding: '14px 20px',
-            borderRadius: '16px',
-            background: 'linear-gradient(to right, #ec4899, #9333ea)',
-            color: '#ffffff',
-            fontWeight: 700,
-            fontSize: '15px',
-            textDecoration: 'none',
-            boxShadow: '0 6px 20px rgba(236, 72, 153, 0.4)',
-          }}
-        >
-          <MessageCircle size={20} /> Suhbatga Kirish <ArrowRight size={18} />
-        </Link>
+      {/* Yonib turuvchi Welcome yozuvi */}
+      <div
+        className="welcome-text"
+        style={{
+          fontSize: 'clamp(20px, 5vw, 28px)',
+          fontWeight: 800,
+          letterSpacing: '6px',
+          textTransform: 'uppercase',
+          background: 'linear-gradient(to right, #ec4899, #c084fc, #facc15)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+        }}
+      >
+        Welcome
       </div>
     </div>
   )
