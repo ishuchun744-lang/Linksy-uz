@@ -37,6 +37,7 @@ import {
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const productionAppUrl = 'https://linksy-uz.vercel.app'
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('NEXT_PUBLIC_SUPABASE_URL va NEXT_PUBLIC_SUPABASE_ANON_KEY sozlanishi kerak.')
 }
@@ -703,7 +704,7 @@ export default function ChatPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin + '/chat',
+        redirectTo: `${process.env.NODE_ENV === 'production' ? productionAppUrl : window.location.origin}/chat`,
       },
     })
     if (error) {
